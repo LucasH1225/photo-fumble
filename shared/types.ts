@@ -1,4 +1,5 @@
 export const MODES = ['quiz', 'voice', 'chat', 'bluff', 'impostor'] as const;
+export const MIN_PLAYERS = 3;
 export type Mode = (typeof MODES)[number];
 export type Phase =
   'prepare' | 'preview' | 'guess' | 'judge' | 'discuss' | 'vote' | 'reveal' | 'results';

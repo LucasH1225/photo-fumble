@@ -9,6 +9,7 @@ import React, {
 import { createRoot } from 'react-dom/client';
 import { io, type Socket } from 'socket.io-client';
 import {
+  MIN_PLAYERS,
   MODE_INFO,
   MODES,
   type Command,
@@ -241,11 +242,15 @@ function App() {
                 <Panel>
                   <h2>One link. All your friends.</h2>
                   <p>
-                    Gather at least four people, each on their own device. Then we’ll pick a host at
-                    random. The host plays too.
+                    Gather at least {MIN_PLAYERS} people, each on their own device. Then we’ll pick
+                    a host at random. The host plays too.
                   </p>
                   <Button
-                    disabled={!connected || busy || view.players.filter((p) => p.online).length < 4}
+                    disabled={
+                      !connected ||
+                      busy ||
+                      view.players.filter((p) => p.online).length < MIN_PLAYERS
+                    }
                     onClick={() => void send({ type: 'elect' })}
                   >
                     Everyone’s here · pick a host
@@ -362,7 +367,7 @@ function Join({
           <Button disabled={busy}>{busy ? 'Joining…' : 'Join friends'}</Button>
         </form>
         <p className="support">
-          You’ll need at least four players. Everyone joins on their own phone or computer.
+          You’ll need at least {MIN_PLAYERS} players. Everyone joins on their own phone or computer.
         </p>
       </Panel>
     </main>
@@ -370,7 +375,7 @@ function Join({
 }
 function ModePicker({ view, send, disabled }: { view: PlayerView; send: Send; disabled: boolean }) {
   const isHost = view.hostId === view.me.id;
-  const enough = view.players.filter((p) => p.online).length >= 4;
+  const enough = view.players.filter((p) => p.online).length >= MIN_PLAYERS;
   return (
     <section className="mode-picker">
       <p>
@@ -398,7 +403,9 @@ function ModePicker({ view, send, disabled }: { view: PlayerView; send: Send; di
         ))}
       </div>
       {isHost && !enough ? (
-        <p className="notice">At least four connected players are needed to start another game.</p>
+        <p className="notice">
+          At least {MIN_PLAYERS} connected players are needed to start another game.
+        </p>
       ) : null}
     </section>
   );

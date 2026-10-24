@@ -13,7 +13,7 @@ npm ci
 npm run dev
 ```
 
-Open **http://localhost:5173**. Use four separate browser profiles/private contexts
+Open **http://localhost:5173**. Use at least three separate browser profiles/private contexts
 to test multiplayer on one computer. Tabs in one profile share a player identity.
 Local game state and files persist in the ignored `.data/` directory.
 
@@ -29,7 +29,22 @@ npm run build
 
 For a built local server, set `APP_ORIGIN=http://localhost:3001` and run `npm start`.
 The development origin defaults to port 5173. Browser tests use isolated temporary
-data and four independent browser contexts, including a phone viewport.
+data and independent browser contexts for both three- and four-player games,
+including a phone viewport. Set `E2E_PORT` to change the default test port 4173.
+
+Check the public deployment with anonymous, read-only requests:
+
+```bash
+npm run test:online
+# Or check another deployment:
+npm run test:online -- https://your-service.onrender.com
+```
+
+This checks the homepage, deployed JavaScript/CSS, health API, and anonymous session
+response. It writes `output/online-checks.json`. It does not join players, upload
+files, or reset the live game. The full multiplayer walkthrough remains a local
+test; use a separate hosted test instance for cloud automation and rehearse on real
+devices before presenting.
 
 ## Hosting
 

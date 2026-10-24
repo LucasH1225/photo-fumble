@@ -111,7 +111,9 @@ each time, not multiple recordings.
 
 ## Adopted demo defaults
 
-- Four connected players minimum; once gathered, anyone requests the random host election.
+- Three connected players minimum for all five modes; once gathered, anyone requests
+  the random host election. With three players, Voice/Chat has one eligible judge
+  per explanation, and Impostor has one impostor and two regular players.
 - Full calendar dates and server receipt ordering in Quiz. First submissions are final;
   no countdown. The host opens guessing after preview and can close missing responses.
 - Same-browser cookies restore identity after refresh. Host stays fixed; if lost,

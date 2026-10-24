@@ -1,6 +1,7 @@
 import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { MODE_INFO, MODES, type PlayerView } from '../../shared/types';
+const playerCount = process.env.E2E_PLAYERS === '3' ? 3 : 4;
 
 function recording() {
   const samples = 8000;
@@ -30,14 +31,14 @@ async function waitPhase(page: Page, phase: string) {
   await expect.poll(async () => (await state(page)).game?.phase).toBe(phase);
 }
 
-test('four browsers play all five modes, refresh safely, and late arrivals wait', async ({
+test(`${playerCount} browsers play all five modes, refresh safely, and late arrivals wait`, async ({
   browser,
 }) => {
   const contexts: BrowserContext[] = [];
   const pages: Page[] = [];
   const names = ['Maya', 'Jules', 'Noor', 'Eli'];
   const errors: string[] = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < playerCount; i++) {
     const context = await browser.newContext({
       viewport: i === 1 ? { width: 390, height: 844 } : { width: 1365, height: 900 },
     });
@@ -50,9 +51,16 @@ test('four browsers play all five modes, refresh safely, and late arrivals wait'
     await page.getByLabel('Your nickname').fill(names[i]);
     await page.getByRole('button', { name: 'Join friends' }).click();
     await expect(page.getByText('Connected', { exact: true })).toBeVisible();
+    if (i === 1)
+      await expect(
+        page.getByRole('button', { name: 'Everyone’s here · pick a host' }),
+      ).toBeDisabled();
   }
   try {
     await expect(pages[1].locator('body')).toHaveJSProperty('scrollWidth', 390);
+    await expect(
+      pages[0].getByRole('button', { name: 'Everyone’s here · pick a host' }),
+    ).toBeEnabled();
     await pages[0].getByRole('button', { name: 'Everyone’s here · pick a host' }).click();
     await expect.poll(async () => (await state(pages[0])).hostId).toBeTruthy();
     const initial = await Promise.all(pages.map((page) => state(page)));
@@ -61,8 +69,26 @@ test('four browsers play all five modes, refresh safely, and late arrivals wait'
     const host = pages[hostIndex];
     const image = await readFile('ui-concepts/assets/sample-memory.jpg');
     for (const mode of MODES) {
-      await host.getByRole('button', { name: new RegExp(MODE_INFO[mode].name) }).click();
+      const card = host.getByRole('button', { name: new RegExp(MODE_INFO[mode].name) });
+      if (playerCount === 3 && mode === 'quiz') {
+        const guest = pages.find((page) => page !== host)!;
+        await guest.goto('about:blank');
+        await expect
+          .poll(async () => (await state(host)).players.filter((p) => p.online).length)
+          .toBe(2);
+        await expect(card).toBeDisabled();
+        await guest.goto('/');
+        await expect(guest.getByText('Connected', { exact: true })).toBeVisible();
+        await expect
+          .poll(async () => (await state(host)).players.filter((p) => p.online).length)
+          .toBe(3);
+      }
+      await expect(card).toBeEnabled();
+      await card.click();
       await waitPhase(host, 'prepare');
+      const prepared = (await state(host)).game!;
+      expect(prepared.roster).toHaveLength(playerCount);
+      expect(Object.values(prepared.scores)).toEqual(Array(playerCount).fill(0));
       let late: BrowserContext | undefined;
       if (mode === 'quiz') {
         late = await browser.newContext();
@@ -97,7 +123,7 @@ test('four browsers play all five modes, refresh safely, and late arrivals wait'
       }
       await expect(host.getByRole('button', { name: 'Start playing' })).toBeEnabled();
       await host.getByRole('button', { name: 'Start playing' }).click();
-      for (let item = 0; item < 4; item++) {
+      for (let item = 0; item < playerCount; item++) {
         await waitPhase(
           host,
           mode === 'quiz' ? 'preview' : mode === 'impostor' ? 'discuss' : 'guess',
@@ -158,7 +184,7 @@ test('four browsers play all five modes, refresh safely, and late arrivals wait'
               .click();
           }
           if (mode === 'voice' || mode === 'chat') {
-            for (let explanation = 0; explanation < 3; explanation++) {
+            for (let explanation = 0; explanation < playerCount - 1; explanation++) {
               await waitPhase(host, 'judge');
               const author = (await state(host)).game!.judgeAuthorId;
               for (let i = 0; i < pages.length; i++)
@@ -167,14 +193,16 @@ test('four browsers play all five modes, refresh safely, and late arrivals wait'
             }
           }
         }
-        await waitPhase(host, item === 3 ? 'results' : 'reveal');
-        if (item < 3) await host.getByRole('button', { name: 'Next item', exact: true }).click();
+        await waitPhase(host, item === playerCount - 1 ? 'results' : 'reveal');
+        if (item < playerCount - 1)
+          await host.getByRole('button', { name: 'Next item', exact: true }).click();
       }
       for (const page of pages)
         await expect(
           page.getByText(`${MODE_INFO[mode].name} complete`, { exact: true }),
         ).toBeVisible();
-      expect((await state(host)).game!.rankings).toHaveLength(4);
+      expect((await state(host)).game!.rankings).toHaveLength(playerCount);
+      await expect(host.locator('.rankings li')).toHaveCount(playerCount);
       if (mode === 'impostor') {
         for (const page of pages) {
           await expect
@@ -189,7 +217,13 @@ test('four browsers play all five modes, refresh safely, and late arrivals wait'
       await late?.close();
     }
     expect(errors).toEqual([]);
-    await host.screenshot({ path: 'output/playwright/final-ranking.png', fullPage: true });
+    await host.screenshot({
+      path:
+        playerCount === 3
+          ? 'output/playwright/final-ranking-3.png'
+          : 'output/playwright/final-ranking.png',
+      fullPage: true,
+    });
   } finally {
     await Promise.all(contexts.map((context) => context.close()));
   }

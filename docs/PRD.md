@@ -229,12 +229,12 @@ interview gaps and are implemented by the server.
 | Area | Adopted behavior |
 | --- | --- |
 | Nicknames and identity | Guest browser identity with a nickname; no account-registration screen for the demo. |
-| Minimum players | Four connected participants. |
-| Starting the session | Any joined player can request random host selection once four are connected; election happens once. |
+| Minimum players | Three connected participants in all five modes. |
+| Starting the session | Any joined player can request random host selection once three are connected; election happens once. |
 | Finishing a game | Use each participant's one item once in all five modes; automatic final rankings. |
 | Subjective answer input | Short typed explanations; discussion can happen in person or on a separate call. |
 | Voice/Chat points | One point for each accepted explanation; zero for a rejected explanation. |
-| Self-judging | Exclude both uploader and explanation author. |
+| Self-judging | Exclude both uploader and explanation author; with three players, one eligible judge decides each explanation. |
 | Judging completion | Collect eligible votes; a host-controlled close can treat uncast votes as abstentions. Require more yes than no, and reject an explanation with no votes. |
 | Impostor selection | Shuffle all photos and participants independently; each is impostor once; uploader remains eligible. |
 | Impostor outcome and points | Unique top suspect catches actual impostor: regulars +1 each; otherwise impostor +2, including ties/no votes. |
@@ -244,7 +244,7 @@ interview gaps and are implemented by the server.
 
 ## 8. Demo acceptance criteria
 
-- Four separate browser identities can complete all five modes in one shared session.
+- Three or four separate browser identities can complete all five modes in one shared session.
 - All five modes have playable submission, interaction, scoring, and results paths
   using the adopted scoring defaults above.
 - A non-host cannot select the mode or trigger the host's skip-to-vote action.

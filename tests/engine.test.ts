@@ -11,7 +11,7 @@ import {
   saveSubmission,
   viewFor,
 } from '../server/engine.js';
-import type { Command, Mode, Session } from '../shared/types.js';
+import { MODES, type Command, type Mode, type Session } from '../shared/types.js';
 
 function fixture(mode: Mode, count = 4) {
   const s = freshSession();
@@ -49,14 +49,29 @@ test('calendar dates are UTC whole days and invalid dates are rejected', () => {
   assert.throws(() => dateDay('2023-02-29'));
   assert.throws(() => dateDay('10 June 2023'));
 });
-test('host selection is random once, and four connected players are required', () => {
+test('host selection is random once, and three connected players are required', () => {
   const s = freshSession();
   ['a', 'b', 'c', 'd'].forEach((id) => addPlayer(s, id, id));
-  assert.throws(() => applyCommand(s, 'a', { type: 'elect' }, new Set(['a', 'b', 'c'])));
-  applyCommand(s, 'a', { type: 'elect' }, new Set(['a', 'b', 'c', 'd']));
-  assert.ok(s.hostId);
+  assert.throws(() => applyCommand(s, 'a', { type: 'elect' }, new Set(['a', 'b'])));
+  const online = new Set(['a', 'b', 'c']);
+  applyCommand(s, 'a', { type: 'elect' }, online);
+  assert.ok(s.hostId && online.has(s.hostId));
   assert.throws(() => applyCommand(s, 'a', { type: 'elect' }, new Set(['a', 'b', 'c', 'd'])));
 });
+for (const mode of MODES) {
+  test(`${mode}: two connected players cannot choose a game, three can`, () => {
+    const s = freshSession();
+    ['a', 'b', 'c', 'offline'].forEach((id) => addPlayer(s, id, id));
+    s.hostId = 'a';
+    assert.throws(() => applyCommand(s, 'a', { type: 'choose', mode }, new Set(['a', 'b'])));
+    assert.equal(s.game, undefined);
+    const online = new Set(['a', 'b', 'c']);
+    assert.throws(() => applyCommand(s, 'b', { type: 'choose', mode }, online));
+    applyCommand(s, 'a', { type: 'choose', mode }, online);
+    assert.deepEqual(s.game!.roster, ['a', 'b', 'c']);
+    assert.equal(s.game!.phase, 'prepare');
+  });
+}
 test('quiz ranks accuracy before speed, then speed for equal distance, with 3/2/1/0', () => {
   const { s, act, owner, others } = fixture('quiz', 5);
   assert.throws(() => act(others[0], { type: 'guess', value: '2023-06-10' }));
@@ -95,6 +110,32 @@ test('bluff gives two per fooled person and one per correct guess', () => {
   assert.equal(s.game!.scores[others[0]], 1);
 });
 for (const mode of ['voice', 'chat'] as const) {
+  test(`${mode}: with three players, one eligible judge accepts or rejects each explanation`, () => {
+    const { s, act, owner, others, online } = fixture(mode, 3);
+    for (const id of others) act(id, { type: 'guess', value: `Explanation from ${id}` });
+    const acceptedAuthor = s.game!.judgeAuthors[0];
+    const rejectedAuthor = s.game!.judgeAuthors[1];
+    for (const yes of [true, false]) {
+      assert.equal(s.game!.phase, 'judge');
+      const author = s.game!.judgeAuthors[s.game!.judgeIndex];
+      const judge = others.find((id) => id !== author)!;
+      assert.equal(viewFor(s, judge, online).game!.eligible, 1);
+      assert.equal(viewFor(s, judge, online).game!.canJudge, true);
+      assert.equal(viewFor(s, owner, online).game!.canJudge, false);
+      assert.equal(viewFor(s, author, online).game!.canJudge, false);
+      assert.throws(() => act(owner, { type: 'judge', yes }));
+      assert.throws(() => act(author, { type: 'judge', yes }));
+      act(judge, { type: 'judge', yes });
+    }
+    assert.equal(s.game!.phase, 'reveal');
+    assert.deepEqual(s.game!.results[0].judgements, [
+      { authorId: acceptedAuthor, yes: 1, no: 0, accepted: true },
+      { authorId: rejectedAuthor, yes: 0, no: 1, accepted: false },
+    ]);
+    assert.equal(s.game!.scores[acceptedAuthor], 1);
+    assert.equal(s.game!.scores[rejectedAuthor], 0);
+    assert.equal(s.game!.scores[owner], 0);
+  });
   test(`${mode}: uploader and author sit out, tied ballot fails only its explanation`, () => {
     const { s, act, owner, others } = fixture(mode);
     act(others[0], { type: 'guess', value: 'First explanation' });
@@ -140,24 +181,27 @@ test('impostor sees only blurred media, others see clear, and assignments are ba
   assert.equal(JSON.stringify(viewFor(s, other, new Set())).includes('blurKey'), false);
   assert.throws(() => mediaKeyFor(s, impostor, `asset-${ids.find((id) => id !== owner)}`));
 });
-test('uploader can be impostor; correct suspect awards regulars, not the impostor', () => {
-  const { s, act, ids, owner } = fixture('impostor');
-  s.game!.impostors[owner] = owner;
-  act('p0', { type: 'skip' });
-  for (const id of ids)
-    act(id, { type: 'vote', targetId: id === owner ? ids.find((p) => p !== owner)! : owner });
-  assert.equal(s.game!.results[0].escaped, false);
-  assert.equal(s.game!.scores[owner], 0);
-  ids.filter((id) => id !== owner).forEach((id) => assert.equal(s.game!.scores[id], 1));
-});
-test('a suspect-vote tie awards two points to the impostor', () => {
-  const { s, act, ids, owner } = fixture('impostor');
-  act('p0', { type: 'skip' });
-  for (let i = 0; i < ids.length; i++)
-    act(ids[i], { type: 'vote', targetId: ids[(i + 1) % ids.length] });
-  assert.equal(s.game!.results[0].escaped, true);
-  assert.equal(s.game!.scores[s.game!.impostors[owner]], 2);
-});
+for (const count of [3, 4]) {
+  test(`${count} players: uploader can be impostor; correct suspect awards only regulars`, () => {
+    const { s, act, ids, owner } = fixture('impostor', count);
+    s.game!.impostors[owner] = owner;
+    act('p0', { type: 'skip' });
+    assert.throws(() => act(owner, { type: 'vote', targetId: owner }));
+    for (const id of ids)
+      act(id, { type: 'vote', targetId: id === owner ? ids.find((p) => p !== owner)! : owner });
+    assert.equal(s.game!.results[0].escaped, false);
+    assert.equal(s.game!.scores[owner], 0);
+    ids.filter((id) => id !== owner).forEach((id) => assert.equal(s.game!.scores[id], 1));
+  });
+  test(`${count} players: a suspect-vote tie awards two points to the impostor`, () => {
+    const { s, act, ids, owner } = fixture('impostor', count);
+    act('p0', { type: 'skip' });
+    for (let i = 0; i < ids.length; i++)
+      act(ids[i], { type: 'vote', targetId: ids[(i + 1) % ids.length] });
+    assert.equal(s.game!.results[0].escaped, true);
+    assert.equal(s.game!.scores[s.game!.impostors[owner]], 2);
+  });
+}
 test('new players wait, cannot access media, and cannot act in an active game', () => {
   const { s, act, owner } = fixture('bluff');
   addPlayer(s, 'Late friend', 'late');

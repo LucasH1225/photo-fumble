@@ -1,5 +1,6 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import {
+  MIN_PLAYERS,
   MODES,
   type Asset,
   type Command,
@@ -178,8 +179,8 @@ export function applyCommand(
   requireRule(state.players[playerId], 'Join the game first.');
   if (command.type === 'elect') {
     requireRule(
-      !state.hostId && online.size >= 4,
-      'Gather at least four friends before choosing a host.',
+      !state.hostId && online.size >= MIN_PLAYERS,
+      `Gather at least ${MIN_PLAYERS} friends before choosing a host.`,
     );
     state.hostId = shuffle([...online])[0];
     return;
@@ -188,8 +189,8 @@ export function applyCommand(
     requireRule(playerId === state.hostId, 'Only the host can choose a mode.');
     requireRule(!state.game || state.game.phase === 'results', 'Finish the current game first.');
     requireRule(
-      MODES.includes(command.mode) && online.size >= 4,
-      'At least four connected players are needed.',
+      MODES.includes(command.mode) && online.size >= MIN_PLAYERS,
+      `At least ${MIN_PLAYERS} connected players are needed.`,
     );
     const roster = Object.keys(state.players).filter((id) => online.has(id));
     state.game = {

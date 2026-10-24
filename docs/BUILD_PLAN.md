@@ -18,7 +18,7 @@ are provisioned automatically. Product behavior is defined in the [PRD](PRD.md).
   rate limits, private media access, static frontend, and health checks.
 - `client/`: responsive React interface based on Pocket Prints.
 - `supabase/migrations/001_initial.sql`: server-only tables and atomic commit RPC.
-- `tests/`: engine, persistence, media, and four-browser five-mode walkthrough.
+- `tests/`: engine, persistence, media, and three-/four-player five-mode walkthrough.
 
 Commands: `npm run dev`, `npm run typecheck`, `npm test`, `npm run test:e2e`,
 `npm run build`, `npm start`, and `npm run session:reset -- --confirm`.
