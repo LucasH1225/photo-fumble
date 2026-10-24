@@ -1,0 +1,12 @@
+{
+  "boards": [
+    "comparison.png",
+    "pocket-five-modes.png",
+    "pocket-phone-flow.png",
+    "pocket-phone-play.png",
+    "hours-five-modes.png",
+    "hours-phone-flow.png",
+    "hours-phone-play.png"
+  ],
+  "qaBoards": 8
+}

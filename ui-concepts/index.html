@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Photo Fumble — visual concepts</title>
+  <link rel="stylesheet" href="concepts.css">
+</head>
+<body>
+  <header class="review-header"><a href="index.html" class="review-brand">Photo Fumble <span>Design review</span></a><nav><a href="../docs/UI_REVIEW_PLAN.md">Screen plan</a><a href="images.html">All images</a></nav></header>
+  <section class="review-intro"><div><p>Two ways to frame a memory.</p><h1>Same friends.<br>Different atmosphere.</h1></div><div><p>HTML 示意图 for the joined-player experience.</p><p>Compare the same game states in Pocket Prints and After Hours. All content is illustrative; open product rules stay open.</p><p class="review-small">Local design previews · 23 screen groups · Five modes</p></div></section>
+  <section class="directions"><button data-theme-pick="pocket" class="direction-card pocket-swatch" aria-pressed="true"><strong>Pocket Prints</strong><span>Bright photo paper. Bold blue. A little flash of yellow.</span><i><b></b><b></b><b></b><b></b></i></button><button data-theme-pick="hours" class="direction-card hours-swatch" aria-pressed="false"><strong>After Hours</strong><span>A plum viewing room. Soft lilac. Suspense in the reveal.</span><i><b></b><b></b><b></b><b></b></i></button></section>
+  <div class="review-toolbar"><label>Screen<select id="scene"></select></label><label>Prepare / result mode<select id="mode"></select></label><label>Viewer<select id="viewer"><option value="player">Player · Alex</option><option value="host">Host · Maya</option><option value="uploader">Uploader · Sam</option></select></label><div class="device-toggle"><button data-device="desktop" aria-pressed="true">Desktop</button><button data-device="phone" aria-pressed="false">Phone</button></div><a id="image-link" href="images.html">Open still image</a></div>
+  <main class="preview-area"><div id="canvas"></div><aside id="annotation"></aside></main>
+  <footer class="review-footer">Mockups only. Names, stories, dates and votes are fictional. Photo: <a href="https://unsplash.com/photos/friends-enjoy-a-sunset-picnic-by-the-sea-b6QEE_6ykp0">Kelvin Zyteng / Unsplash</a>. <a href="../docs/UI_RESEARCH_SYNTHESIS.md">Research and evidence</a></footer>
+  <script src="concepts.js"></script>
+</body>
+</html>
