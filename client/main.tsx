@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
   type FormEvent,
@@ -32,10 +33,68 @@ type ViewGame = NonNullable<PlayerView['game']>;
 const nameOf = (view: PlayerView, id?: string) =>
   view.players.find((p) => p.id === id)?.name ?? 'A friend';
 function Avatar({ name, small = false }: { name: string; small?: boolean }) {
+  const color = Array.from(name).reduce((sum, letter) => sum + letter.codePointAt(0)!, 0) % 5;
   return (
-    <span className={`avatar${small ? ' small' : ''}`} aria-hidden="true">
-      {name.slice(0, 2)}
+    <span className={`avatar avatar-${color}${small ? ' small' : ''}`} aria-hidden="true">
+      {Array.from(name).slice(0, 2).join('')}
     </span>
+  );
+}
+function Aperture() {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+      <rect x="5" y="5" width="38" height="38" rx="15" stroke="currentColor" strokeWidth="2" />
+      <circle cx="24" cy="24" r="9" stroke="currentColor" strokeWidth="2" />
+      <path d="m24 5 8 12m11 7-14 7m-5 12-8-12M5 24l14-7" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+function ModeIcon({ mode }: { mode: Mode }) {
+  const paths: Record<Mode, ReactNode> = {
+    quiz: (
+      <>
+        <rect x="12" y="15" width="40" height="37" rx="7" />
+        <path d="M12 27h40M23 10v11m18-11v11m-19 16h8v8h-8m17-8h4m-4 8h4" />
+      </>
+    ),
+    voice: (
+      <>
+        <rect x="25" y="10" width="14" height="29" rx="7" />
+        <path d="M18 30v3a14 14 0 0 0 28 0v-3M32 47v8m-9 0h18M10 22v14m44-14v14" />
+      </>
+    ),
+    chat: (
+      <>
+        <path d="M49 39V17a6 6 0 0 0-6-6H15a6 6 0 0 0-6 6v22a6 6 0 0 0 6 6h5v9l12-9h11a6 6 0 0 0 6-6Z" />
+        <path d="M19 23h20M19 32h13" />
+      </>
+    ),
+    bluff: (
+      <>
+        <path d="m32 9 22 23-22 23L10 32 32 9Z" />
+        <path d="M32 9v46M10 32h44m-33-11 22 22m0-22L21 43" />
+      </>
+    ),
+    impostor: (
+      <>
+        <path d="M7 32s9-17 25-17 25 17 25 17-9 17-25 17S7 32 7 32Z" />
+        <circle cx="32" cy="32" r="8" />
+        <path d="m12 12 40 40" />
+      </>
+    ),
+  };
+  return (
+    <svg
+      viewBox="0 0 64 64"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {paths[mode]}
+    </svg>
   );
 }
 function Button({
@@ -151,7 +210,8 @@ function App() {
     return (
       <main className="boot">
         <span className="brand">
-          Photo Fumble<span>✳</span>
+          <Aperture />
+          Photo Fumble
         </span>
         <p>Finding your friends…</p>
       </main>
@@ -160,7 +220,8 @@ function App() {
     <>
       <header className="topbar">
         <a className="brand" href="/" aria-label="Photo Fumble home">
-          Photo Fumble<span>✳</span>
+          <Aperture />
+          Photo Fumble
         </a>
         <div className="session-meta">
           {view ? (
@@ -219,6 +280,7 @@ function App() {
               {view.players.filter((p) => p.online).length} friends here
             </span>
           </div>
+          <Roster view={view} />
           {!connected ? (
             <p className="notice" role="status">
               Reconnecting… Your saved place is safe. Actions will resume when you’re connected.
@@ -262,7 +324,15 @@ function App() {
               ) : !view.game ? (
                 <ModePicker view={view} send={send} disabled={!connected || busy} />
               ) : view.game.phase === 'prepare' ? (
-                <Prepare key={view.game.id} view={view} onError={setError} disabled={!connected} />
+                <>
+                  <Prepare
+                    key={view.game.id}
+                    view={view}
+                    onError={setError}
+                    disabled={!connected || busy}
+                  />
+                  <PreparationControls view={view} send={send} disabled={!connected || busy} />
+                </>
               ) : view.game.phase === 'results' ? (
                 <>
                   <Results view={view} />
@@ -277,7 +347,6 @@ function App() {
                 />
               )}
             </div>
-            <Roster view={view} send={send} disabled={!connected || busy} />
           </div>
         </main>
       )}
@@ -327,7 +396,7 @@ function Join({
     <main className="join-layout">
       <section className="join-intro">
         <span className="little-photo" aria-hidden="true">
-          ✳
+          <Aperture />
         </span>
         <h1>
           You had
@@ -348,9 +417,6 @@ function Join({
         </div>
       </section>
       <Panel className="join-panel">
-        <span className="paper-mark" aria-hidden="true">
-          ↳
-        </span>
         <h2>Find your people.</h2>
         <p>One website, one shared game. Join with a nickname your friends will recognize.</p>
         <form onSubmit={submit}>
@@ -374,34 +440,70 @@ function Join({
   );
 }
 function ModePicker({ view, send, disabled }: { view: PlayerView; send: Send; disabled: boolean }) {
+  const [selected, setSelected] = useState<Mode>();
   const isHost = view.hostId === view.me.id;
   const enough = view.players.filter((p) => p.online).length >= MIN_PLAYERS;
   return (
     <section className="mode-picker">
       <p>
         {isHost
-          ? 'Choose a game. Everyone brings one item after you choose.'
+          ? 'Five ways to remember differently. Choose one, then prepare together.'
           : `${nameOf(view, view.hostId)} is choosing your next game.`}
       </p>
       <div className="mode-grid">
         {MODES.map((mode) => (
           <button
-            className={`mode-card mode-${mode}`}
+            className={`mode-card mode-${mode}${selected === mode ? ' selected' : ''}`}
             key={mode}
-            disabled={!isHost || disabled || !enough}
-            onClick={() => void send({ type: 'choose', mode })}
+            disabled={!isHost || disabled}
+            aria-pressed={selected === mode}
+            onClick={() => setSelected(mode)}
           >
             <span className="mode-symbol" aria-hidden="true">
-              {MODE_INFO[mode].icon}
+              <ModeIcon mode={mode} />
             </span>
             <span>
               <strong>{MODE_INFO[mode].name}</strong>
               <span>{MODE_INFO[mode].description}</span>
-              <small>One {MODE_INFO[mode].upload} each</small>
+              <small>
+                {mode === 'bluff'
+                  ? 'One photo + two stories each'
+                  : mode === 'quiz'
+                    ? 'One photo + its date each'
+                    : ['voice', 'chat'].includes(mode)
+                      ? `One ${MODE_INFO[mode].upload} + context each`
+                      : 'One photo each'}
+              </small>
             </span>
           </button>
         ))}
       </div>
+      {isHost ? (
+        <div className="mode-confirm">
+          <p role="status">
+            {selected ? (
+              <>
+                <strong>{MODE_INFO[selected].name}</strong> selected. Everyone prepares one item
+                next.
+              </>
+            ) : (
+              'Pick the memory you want to play with.'
+            )}
+          </p>
+          <Button
+            disabled={disabled || !enough || !selected}
+            onClick={() => {
+              if (selected) void send({ type: 'choose', mode: selected });
+            }}
+          >
+            Prepare this game
+          </Button>
+        </div>
+      ) : (
+        <p className="support">
+          You’ll prepare your item once the host chooses. Every game starts with fresh scores.
+        </p>
+      )}
       {isHost && !enough ? (
         <p className="notice">
           At least {MIN_PLAYERS} connected players are needed to start another game.
@@ -410,25 +512,40 @@ function ModePicker({ view, send, disabled }: { view: PlayerView; send: Send; di
     </section>
   );
 }
-function Roster({ view, send, disabled }: { view: PlayerView; send: Send; disabled: boolean }) {
+function Roster({ view }: { view: PlayerView }) {
   const g = view.game;
-  const isHost = view.hostId === view.me.id;
   return (
-    <aside className="roster">
-      <h2>The whole crew</h2>
-      <ul>
-        {view.players.map((p) => (
-          <li key={p.id}>
-            <Avatar name={p.name} />
-            <div>
-              <strong>
-                {p.name}
-                {p.id === view.me.id ? ' (you)' : ''}
-              </strong>
-              <small>
-                {p.id === view.hostId
-                  ? 'Host'
-                  : !p.online
+    <details className="roster">
+      <summary>
+        <span className="crew-avatars">
+          {view.players.slice(0, 6).map((p) => (
+            <Avatar key={p.id} small name={p.name} />
+          ))}
+        </span>
+        <span>
+          The whole crew{' '}
+          <small>
+            {view.players.length} {view.players.length === 1 ? 'player' : 'players'}
+            {g?.phase === 'prepare' ? ` · ${g.ready.length} ready` : ''}
+          </small>
+        </span>
+        <span className="crew-expand">
+          View players <span aria-hidden="true">⌄</span>
+        </span>
+      </summary>
+      <div className="roster-content">
+        <ul>
+          {view.players.map((p) => (
+            <li key={p.id}>
+              <Avatar name={p.name} />
+              <div>
+                <strong>
+                  {p.name}
+                  {p.id === view.me.id ? ' (you)' : ''}
+                </strong>
+                <small>
+                  {p.id === view.hostId ? 'Host · ' : ''}
+                  {!p.online
                     ? 'Offline'
                     : g && !g.roster.includes(p.id) && g.phase !== 'results'
                       ? 'Next game'
@@ -437,24 +554,53 @@ function Roster({ view, send, disabled }: { view: PlayerView; send: Send; disabl
                           ? 'Ready ✓'
                           : 'Preparing'
                         : 'Here'}
-              </small>
-            </div>
-            {g && !view.waiting && g.phase !== 'prepare' && g.roster.includes(p.id) ? (
-              <b className="points">{g.scores[p.id] ?? 0}</b>
-            ) : (
-              <span
-                className={`presence ${p.online ? 'here' : ''}`}
-                aria-label={p.online ? 'Online' : 'Offline'}
-              />
-            )}
-          </li>
-        ))}
-      </ul>
-      {g?.phase === 'prepare' && isHost ? (
+                </small>
+              </div>
+              {g && !view.waiting && g.phase !== 'prepare' && g.roster.includes(p.id) ? (
+                <b className="points">{g.scores[p.id] ?? 0}</b>
+              ) : (
+                <span
+                  className={`presence ${p.online ? 'here' : ''}`}
+                  aria-label={p.online ? 'Online' : 'Offline'}
+                />
+              )}
+            </li>
+          ))}
+        </ul>
+        <p className="support">
+          {view.hostId
+            ? `${nameOf(view, view.hostId)} controls the flow. Scores belong to this game only.`
+            : 'Your host will be picked at random and stay with you.'}
+        </p>
+      </div>
+    </details>
+  );
+}
+function PreparationControls({
+  view,
+  send,
+  disabled,
+}: {
+  view: PlayerView;
+  send: Send;
+  disabled: boolean;
+}) {
+  const g = view.game!;
+  return (
+    <section className="preparation-controls" aria-label="Group readiness">
+      <div>
+        <strong>
+          {g.ready.length} of {g.roster.length} ready
+        </strong>
+        <p className="support">
+          {g.ready.length === g.roster.length
+            ? 'Every memory is in. Let’s play.'
+            : 'Everyone brings one item before the game begins.'}
+        </p>
+        <progress value={g.ready.length} max={g.roster.length} aria-label="Players ready" />
+      </div>
+      {view.hostId === view.me.id ? (
         <div className="host-actions">
-          <p>
-            {g.ready.length} of {g.roster.length} ready
-          </p>
           <Button
             disabled={disabled || g.ready.length !== g.roster.length}
             onClick={() => void send({ type: 'start' })}
@@ -472,13 +618,10 @@ function Roster({ view, send, disabled }: { view: PlayerView; send: Send; disabl
             Cancel preparation
           </Button>
         </div>
-      ) : null}
-      <p className="support">
-        {view.hostId
-          ? `${nameOf(view, view.hostId)} controls the flow. Scores belong to this game only.`
-          : 'Your host will be picked at random and stay with you.'}
-      </p>
-    </aside>
+      ) : (
+        <p className="support">{nameOf(view, view.hostId)} will start when everyone is ready.</p>
+      )}
+    </section>
   );
 }
 interface Mask {
@@ -640,15 +783,6 @@ function Prepare({
         <div className="receipt" role="status">
           <strong>✓ Your {MODE_INFO[g.mode].upload} is ready.</strong>
           <p>The host will start when everyone is ready. You can replace it below.</p>
-          {audio ? (
-            <audio controls preload="metadata" src={`/api/media/${own.assetId}`} />
-          ) : (
-            <img
-              className="saved-preview"
-              src={`/api/media/${own.assetId}`}
-              alt="Your prepared upload"
-            />
-          )}
         </div>
       ) : (
         <>
@@ -662,93 +796,123 @@ function Prepare({
         </>
       )}
       <form onSubmit={submit} className="prepare-form">
-        <label htmlFor="upload">
-          {own ? 'Replace your' : 'Choose one'} {MODE_INFO[g.mode].upload}
-        </label>
-        <input
-          id="upload"
-          type="file"
-          accept={
-            audio
-              ? '.mp3,.m4a,.wav,audio/mpeg,audio/mp4,audio/wav'
-              : 'image/jpeg,image/png,image/webp'
-          }
-          required={!own}
-          onChange={(e) => {
-            setFile(e.target.files?.[0]);
-            setMasks([]);
-            setRedacted(false);
-          }}
-          disabled={uploading}
-        />
-        <p className="support">
-          {audio
-            ? 'MP3, M4A, or WAV · up to 60 seconds and 20 MB'
-            : 'JPEG, PNG, or WebP · up to 10 MB. Export HEIC as JPEG.'}
-        </p>
-        {preview ? (
-          audio ? (
-            <audio controls src={preview} />
-          ) : g.mode === 'chat' ? (
-            <MaskEditor src={preview} masks={masks} onChange={setMasks} />
-          ) : (
-            <img className="upload-preview" src={preview} alt="Photo you are preparing" />
-          )
-        ) : null}
-        {g.mode === 'quiz' ? (
-          <>
-            <label htmlFor="answer">When was this taken?</label>
-            <input
-              id="answer"
-              type="date"
-              value={answer}
-              required
-              onChange={(e) => setAnswer(e.target.value)}
-            />
-          </>
-        ) : null}
-        {['voice', 'chat', 'bluff'].includes(g.mode) ? (
-          <>
-            <label htmlFor="answer">
-              {g.mode === 'bluff' ? 'The true story' : 'What actually happened?'}
-            </label>
-            <textarea
-              id="answer"
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              maxLength={1500}
-              required
-              placeholder="Give your friends enough context for the reveal."
-            />
-          </>
-        ) : null}
-        {g.mode === 'bluff' ? (
-          <>
-            <label htmlFor="false-story">The invented story</label>
-            <textarea
-              id="false-story"
-              value={falseStory}
-              onChange={(e) => setFalseStory(e.target.value)}
-              maxLength={1500}
-              required
-              placeholder="Make it believable."
-            />
-          </>
-        ) : null}
-        {g.mode === 'chat' ? (
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={redacted}
-              onChange={(e) => setRedacted(e.target.checked)}
-              required
-            />
-            I checked the preview: names, avatars, and identifying details are hidden.
+        <div className="prepare-media">
+          <label htmlFor="upload">
+            {own ? 'Replace your' : 'Choose one'} {MODE_INFO[g.mode].upload}
           </label>
-        ) : null}
-        <Button disabled={disabled || uploading || !file}>
-          {uploading ? 'Saving your memory…' : own ? 'Replace my item' : 'My item is ready'}
-        </Button>
+          <input
+            id="upload"
+            type="file"
+            accept={
+              audio
+                ? '.mp3,.m4a,.wav,audio/mpeg,audio/mp4,audio/wav'
+                : 'image/jpeg,image/png,image/webp'
+            }
+            required={!own}
+            onChange={(e) => {
+              setFile(e.target.files?.[0]);
+              setMasks([]);
+              setRedacted(false);
+            }}
+            disabled={uploading}
+          />
+          <p className="support">
+            {audio
+              ? 'MP3, M4A, or WAV · up to 60 seconds and 20 MB'
+              : 'JPEG, PNG, or WebP · up to 10 MB. Export HEIC as JPEG.'}
+          </p>
+          {preview ? (
+            audio ? (
+              <audio controls src={preview} />
+            ) : g.mode === 'chat' ? (
+              <MaskEditor src={preview} masks={masks} onChange={setMasks} />
+            ) : (
+              <img className="upload-preview" src={preview} alt="Photo you are preparing" />
+            )
+          ) : own ? (
+            audio ? (
+              <audio controls preload="metadata" src={`/api/media/${own.assetId}`} />
+            ) : (
+              <img
+                className="upload-preview"
+                src={`/api/media/${own.assetId}`}
+                alt="Your prepared upload"
+              />
+            )
+          ) : (
+            <div className="upload-empty" aria-hidden="true">
+              <ModeIcon mode={g.mode} />
+              <span>Your {MODE_INFO[g.mode].upload} goes here.</span>
+            </div>
+          )}
+        </div>
+        <div className="prepare-fields">
+          <div className="private-note">
+            <span aria-hidden="true">◈</span>
+            {g.mode === 'impostor'
+              ? 'One friend will get a blurred view of this photo.'
+              : 'Your answer stays private until the reveal.'}
+          </div>
+          {g.mode === 'quiz' ? (
+            <>
+              <label htmlFor="answer">When was this taken?</label>
+              <input
+                id="answer"
+                type="date"
+                value={answer}
+                required
+                onChange={(e) => setAnswer(e.target.value)}
+              />
+            </>
+          ) : null}
+          {['voice', 'chat', 'bluff'].includes(g.mode) ? (
+            <>
+              <label htmlFor="answer">
+                {g.mode === 'bluff' ? 'The true story' : 'What actually happened?'}
+              </label>
+              <textarea
+                id="answer"
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+                maxLength={1500}
+                required
+                placeholder="Give your friends enough context for the reveal."
+              />
+            </>
+          ) : null}
+          {g.mode === 'bluff' ? (
+            <>
+              <label htmlFor="false-story">The invented story</label>
+              <textarea
+                id="false-story"
+                value={falseStory}
+                onChange={(e) => setFalseStory(e.target.value)}
+                maxLength={1500}
+                required
+                placeholder="Make it believable."
+              />
+            </>
+          ) : null}
+          {g.mode === 'chat' ? (
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={redacted}
+                onChange={(e) => setRedacted(e.target.checked)}
+                required
+              />
+              I checked the preview: names, avatars, and identifying details are hidden.
+            </label>
+          ) : null}
+          <Button disabled={disabled || uploading || !file}>
+            {uploading ? 'Saving your memory…' : own ? 'Replace my item' : 'My item is ready'}
+          </Button>
+          <p className="support">
+            {own
+              ? 'Replacing an item updates your contribution to this game.'
+              : 'One item each. Your friends bring the rest.'}
+          </p>
+        </div>
       </form>
     </Panel>
   );
@@ -757,7 +921,12 @@ function Media({ view, onLoaded }: { view: PlayerView; onLoaded?: () => void }) 
   const g = view.game!;
   const [retry, setRetry] = useState(0);
   const [failed, setFailed] = useState(false);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const previewTitle = useId();
   const url = `/api/media/${g.assetId}?view=${g.blurred ? 'blurred' : 'clear'}&retry=${retry}`;
+  useEffect(() => {
+    dialog.current?.close();
+  }, [g.phaseKey, g.assetId]);
   return (
     <div className="media-area">
       <div className="photo-mount">
@@ -785,6 +954,33 @@ function Media({ view, onLoaded }: { view: PlayerView; onLoaded?: () => void }) 
           />
         )}
       </div>
+      {g.mode === 'chat' ? (
+        <>
+          <button
+            className="enlarge-button"
+            disabled={failed}
+            onClick={() => dialog.current?.showModal()}
+          >
+            Enlarge screenshot
+          </button>
+          <dialog
+            ref={dialog}
+            className="media-dialog"
+            aria-labelledby={previewTitle}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) dialog.current?.close();
+            }}
+          >
+            <div className="dialog-heading">
+              <h2 id={previewTitle}>The conversation</h2>
+              <Button secondary autoFocus onClick={() => dialog.current?.close()}>
+                Close preview
+              </Button>
+            </div>
+            <img src={url} alt="Enlarged anonymized conversation" />
+          </dialog>
+        </>
+      ) : null}
       <div className="media-caption">
         <span>
           <Avatar small name={nameOf(view, g.ownerId)} />
@@ -1060,48 +1256,48 @@ function Play({ view, send, disabled }: { view: PlayerView; send: Send; disabled
               </p>
             </>
           )}
+          {isHost ? (
+            <div className="flow-controls">
+              {g.phase === 'reveal' ? (
+                <Button disabled={disabled} onClick={() => void send({ type: 'next' })}>
+                  Next item
+                </Button>
+              ) : ['guess', 'judge', 'vote'].includes(g.phase) ? (
+                <Button
+                  secondary
+                  disabled={disabled}
+                  onClick={() => {
+                    if (
+                      confirm(
+                        'Close this stage? Missing guesses get zero points and uncast votes abstain.',
+                      )
+                    )
+                      void send({ type: 'close' });
+                  }}
+                >
+                  Close {g.phase === 'guess' ? 'guessing' : 'voting'}
+                </Button>
+              ) : null}
+              {!['reveal', 'results'].includes(g.phase) ? (
+                <button
+                  className="text-button"
+                  disabled={disabled}
+                  onClick={() => {
+                    if (
+                      confirm(
+                        'Skip this item with no points for anyone? Use this if its media cannot be played.',
+                      )
+                    )
+                      void send({ type: 'skipItem' });
+                  }}
+                >
+                  Skip unusable item
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </Panel>
       </div>
-      {isHost ? (
-        <div className="flow-controls">
-          {g.phase === 'reveal' ? (
-            <Button disabled={disabled} onClick={() => void send({ type: 'next' })}>
-              Next item
-            </Button>
-          ) : ['guess', 'judge', 'vote'].includes(g.phase) ? (
-            <Button
-              secondary
-              disabled={disabled}
-              onClick={() => {
-                if (
-                  confirm(
-                    'Close this stage? Missing guesses get zero points and uncast votes abstain.',
-                  )
-                )
-                  void send({ type: 'close' });
-              }}
-            >
-              Close {g.phase === 'guess' ? 'guessing' : 'voting'}
-            </Button>
-          ) : null}
-          {!['reveal', 'results'].includes(g.phase) ? (
-            <button
-              className="text-button"
-              disabled={disabled}
-              onClick={() => {
-                if (
-                  confirm(
-                    'Skip this item with no points for anyone? Use this if its media cannot be played.',
-                  )
-                )
-                  void send({ type: 'skipItem' });
-              }}
-            >
-              Skip unusable item
-            </button>
-          ) : null}
-        </div>
-      ) : null}
     </>
   );
 }
@@ -1109,6 +1305,8 @@ function Reveal({ view }: { view: PlayerView }) {
   const g = view.game!;
   const r = g.result;
   if (!r) return null;
+  const distance = (id: string) =>
+    Math.abs(Math.round((Date.parse(r.guesses[id].value) - Date.parse(r.answer!)) / 86400000));
   return (
     <div className="reveal-content">
       <h2>
@@ -1137,10 +1335,55 @@ function Reveal({ view }: { view: PlayerView }) {
                   : 'There was no unique top suspect.'}
               </p>
             </>
+          ) : g.mode === 'bluff' && r.options ? (
+            <>
+              <div className="story-reveal-list">
+                {r.options.map((story, i) => {
+                  const voters = Object.entries(r.guesses).filter(
+                    ([, guess]) => guess.value === String(i),
+                  );
+                  return (
+                    <div
+                      className={`story-result ${i === r.trueIndex ? 'true' : 'invented'}`}
+                      key={i}
+                    >
+                      <strong>
+                        Story {i === 0 ? 'A' : 'B'} ·{' '}
+                        {i === r.trueIndex ? 'True story' : 'Invented story'}
+                      </strong>
+                      <p>{story}</p>
+                      <small>
+                        {voters.length
+                          ? `Chosen by ${voters.map(([id]) => nameOf(view, id)).join(', ')}`
+                          : 'No one chose this story.'}
+                      </small>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="score-callout">
+                <strong>
+                  {
+                    Object.values(r.guesses).filter((guess) => guess.value !== String(r.trueIndex))
+                      .length
+                  }{' '}
+                  friends fooled
+                </strong>
+                <p>
+                  {nameOf(view, r.ownerId)} earns {r.awards[r.ownerId] ?? 0} points. Each correct
+                  guess earns one.
+                </p>
+              </div>
+            </>
           ) : g.mode !== 'quiz' ? (
             <p className="revealed-answer">{r.answer}</p>
           ) : (
-            <p>The date behind {nameOf(view, r.ownerId)}’s photo.</p>
+            <>
+              <p>The date behind {nameOf(view, r.ownerId)}’s photo.</p>
+              <p className="support">
+                Closest date first. For equal distances, the server’s receipt order breaks the tie.
+              </p>
+            </>
           )}
           {r.judgements ? (
             <ul className="judgement-list">
@@ -1159,26 +1402,36 @@ function Reveal({ view }: { view: PlayerView }) {
           ) : null}
           <ul className="awards-list">
             {Object.entries(r.awards)
-              .sort((a, b) => b[1] - a[1])
-              .map(([id, points]) => (
-                <li key={id}>
-                  <span>
-                    {nameOf(view, id)}
-                    {g.mode === 'quiz' && r.guesses[id] ? (
-                      <small>
-                        {r.guesses[id].value} ·{' '}
-                        {Math.abs(
-                          Math.round(
-                            (Date.parse(r.guesses[id].value) - Date.parse(r.answer!)) / 86400000,
-                          ),
-                        )}{' '}
-                        days away
-                      </small>
-                    ) : null}
-                  </span>
-                  <strong>+{points}</strong>
-                </li>
-              ))}
+              .sort(
+                (a, b) =>
+                  b[1] - a[1] || (r.guesses[a[0]]?.order ?? 0) - (r.guesses[b[0]]?.order ?? 0),
+              )
+              .map(([id, points]) => {
+                const tied =
+                  g.mode === 'quiz' && r.guesses[id]
+                    ? Object.keys(r.guesses)
+                        .filter((other) => distance(other) === distance(id))
+                        .sort((a, b) => r.guesses[a].order - r.guesses[b].order)
+                    : [];
+                return (
+                  <li key={id}>
+                    <span>
+                      {nameOf(view, id)}
+                      {g.mode === 'quiz' && r.guesses[id] ? (
+                        <small>
+                          {r.guesses[id].value} · {distance(id)} days away
+                          {tied.length > 1 ? (
+                            <span className="tie-note">
+                              Equal distance: received {tied.indexOf(id) + 1} of {tied.length}.
+                            </span>
+                          ) : null}
+                        </small>
+                      ) : null}
+                    </span>
+                    <strong>+{points}</strong>
+                  </li>
+                );
+              })}
           </ul>
           {!Object.keys(r.awards).length ? <p>No points awarded.</p> : null}
         </>
@@ -1192,32 +1445,37 @@ function Results({ view }: { view: PlayerView }) {
   return (
     <>
       <Panel className="results">
-        <div className="winner-mark" aria-hidden="true">
-          ✳
+        <div className="winner">
+          <div className="winner-mark" aria-hidden="true">
+            ✳
+          </div>
+          <p>{MODE_INFO[g.mode].name} complete</p>
+          <h2>{winners.map((p) => nameOf(view, p.playerId)).join(' & ')}</h2>
+          <p>
+            {winners.length > 1 ? 'Share the win.' : 'Takes this one.'} {winners[0]?.score ?? 0}{' '}
+            points.
+          </p>
+          <p className="support">A new game starts fresh. Your uploads stay saved.</p>
         </div>
-        <p>{MODE_INFO[g.mode].name} complete</p>
-        <h2>{winners.map((p) => nameOf(view, p.playerId)).join(' & ')}</h2>
-        <p>
-          {winners.length > 1 ? 'Share the win.' : 'Takes this one.'} {winners[0]?.score ?? 0}{' '}
-          points.
-        </p>
-        <ol className="rankings">
-          {g.rankings?.map((p) => (
-            <li key={p.playerId} className={p.playerId === view.me.id ? 'you' : ''}>
-              <span className="rank">{p.rank}</span>
-              <Avatar name={nameOf(view, p.playerId)} />
-              <strong>
-                {nameOf(view, p.playerId)}
-                {p.playerId === view.me.id ? ' (you)' : ''}
-              </strong>
-              <span>
-                {p.score}
-                <small> points</small>
-              </span>
-            </li>
-          ))}
-        </ol>
-        <p className="support">A new game starts fresh. Your uploads stay saved.</p>
+        <div className="ranking-panel">
+          <h3>The full picture</h3>
+          <ol className="rankings">
+            {g.rankings?.map((p) => (
+              <li key={p.playerId} className={p.playerId === view.me.id ? 'you' : ''}>
+                <span className="rank">{p.rank}</span>
+                <Avatar name={nameOf(view, p.playerId)} />
+                <strong>
+                  {nameOf(view, p.playerId)}
+                  {p.playerId === view.me.id ? ' (you)' : ''}
+                </strong>
+                <span>
+                  {p.score}
+                  <small> points</small>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
       </Panel>
       <details className="last-reveal" open>
         <summary>The final reveal</summary>
