@@ -5,6 +5,7 @@ import {
   applyCommand,
   currentOwner,
   dateDay,
+  expireRound,
   freshSession,
   mediaKeyFor,
   phaseKey,
@@ -49,15 +50,142 @@ test('calendar dates are UTC whole days and invalid dates are rejected', () => {
   assert.throws(() => dateDay('2023-02-29'));
   assert.throws(() => dateDay('10 June 2023'));
 });
-test('host selection is random once, and three connected players are required', () => {
+test('initial random host selection needs three players; only the host can reroll while online', () => {
   const s = freshSession();
   ['a', 'b', 'c', 'd'].forEach((id) => addPlayer(s, id, id));
   assert.throws(() => applyCommand(s, 'a', { type: 'elect' }, new Set(['a', 'b'])));
   const online = new Set(['a', 'b', 'c']);
   applyCommand(s, 'a', { type: 'elect' }, online);
   assert.ok(s.hostId && online.has(s.hostId));
-  assert.throws(() => applyCommand(s, 'a', { type: 'elect' }, new Set(['a', 'b', 'c', 'd'])));
+  const guest = [...online].find((id) => id !== s.hostId)!;
+  assert.throws(() => applyCommand(s, guest, { type: 'elect' }, online));
+  applyCommand(s, s.hostId, { type: 'elect' }, online);
+  assert.ok(s.hostId && online.has(s.hostId));
 });
+
+test('players can select an initial host, transfer control, and recover an offline host', () => {
+  const s = freshSession();
+  ['a', 'b', 'c', 'offline'].forEach((id) => addPlayer(s, id, id));
+  const online = new Set(['a', 'b', 'c']);
+  assert.throws(() => applyCommand(s, 'a', { type: 'setHost', targetId: 'offline' }, online));
+  applyCommand(s, 'a', { type: 'setHost', targetId: 'b' }, online);
+  assert.equal(s.hostId, 'b');
+  assert.throws(() => applyCommand(s, 'a', { type: 'setHost', targetId: 'a' }, online));
+  applyCommand(s, 'b', { type: 'setHost', targetId: 'c' }, online);
+  assert.equal(s.hostId, 'c');
+  online.delete('c');
+  applyCommand(s, 'a', { type: 'setHost', targetId: 'a' }, online);
+  assert.equal(s.hostId, 'a');
+});
+
+test('active host transfers preserve the game and exclude waiting newcomers', () => {
+  const { s, act, online } = fixture('bluff');
+  const game = structuredClone(s.game);
+  addPlayer(s, 'Late friend', 'late');
+  online.add('late');
+  assert.throws(() => act('p0', { type: 'setHost', targetId: 'late' }));
+  online.delete('p0');
+  assert.throws(() => act('late', { type: 'setHost', targetId: 'late' }));
+  act('p1', { type: 'setHost', targetId: 'p1' });
+  assert.equal(s.hostId, 'p1');
+  assert.deepEqual(s.game, game);
+  assert.throws(() => act('p0', { type: 'close' }));
+  act('p1', { type: 'close' });
+  assert.equal(s.game!.phase, 'reveal');
+});
+
+test('back to lobby is available to the host after results and retains players and uploads', () => {
+  const { s, act, ids } = fixture('bluff');
+  assert.throws(() => act('p0', { type: 'lobby' }));
+  ids.forEach((_, i) => {
+    act('p0', { type: 'close' });
+    if (i < ids.length - 1) act('p0', { type: 'next' });
+  });
+  assert.throws(() => act('p1', { type: 'lobby' }));
+  const assets = structuredClone(s.assets);
+  act('p0', { type: 'lobby' });
+  assert.equal(s.game, undefined);
+  assert.equal(s.hostId, 'p0');
+  assert.equal(Object.keys(s.players).length, ids.length);
+  assert.deepEqual(s.assets, assets);
+  assert.equal(viewFor(s, 'p1', new Set(ids)).game, undefined);
+  act('p0', { type: 'choose', mode: 'quiz' });
+  assert.ok(Object.values(s.game!.scores).every((score) => score === 0));
+});
+
+for (const mode of MODES) {
+  test(`${mode}: deadlines advance active stages once and reset for each item`, () => {
+    const { s, online } = fixture(mode);
+    const g = s.game!;
+    const now = 1_000;
+    delete g.deadlineAt;
+    if (mode === 'quiz') {
+      assert.equal(expireRound(s, now), false);
+      applyCommand(s, 'p0', { type: 'open' }, online, now);
+    } else {
+      // A saved game from before timers gets a fresh deadline on recovery.
+      assert.equal(expireRound(s, now), true);
+    }
+    assert.equal(g.deadlineAt, now + (mode === 'voice' ? 90_000 : 60_000));
+    const deadline = g.deadlineAt!;
+    assert.equal(viewFor(s, 'p0', online).game?.deadlineAt, deadline);
+    assert.equal(expireRound(s, deadline - 1), false);
+    assert.equal(expireRound(s, deadline), true);
+    if (mode === 'impostor') {
+      assert.equal(g.phase, 'vote');
+      assert.equal(g.deadlineAt, deadline + 30_000);
+      assert.equal(expireRound(s, g.deadlineAt), true);
+    }
+    assert.equal(g.phase, 'reveal');
+    assert.equal(g.deadlineAt, undefined);
+    assert.equal(g.results.length, 1);
+    assert.equal(expireRound(s, deadline + 1_000_000), false);
+    assert.equal(g.results.length, 1);
+    applyCommand(s, 'p0', { type: 'next' }, online, deadline + 2_000_000);
+    assert.equal(g.phase, mode === 'quiz' ? 'preview' : mode === 'impostor' ? 'discuss' : 'guess');
+    assert.equal(
+      g.deadlineAt,
+      mode === 'quiz' ? undefined : deadline + 2_000_000 + (mode === 'voice' ? 90_000 : 60_000),
+    );
+  });
+}
+
+test('expired guesses are rejected; submitted guesses score normally on timeout', () => {
+  const { s, act, others, online } = fixture('quiz');
+  act('p0', { type: 'open' });
+  const deadline = s.game!.deadlineAt!;
+  applyCommand(s, others[0], { type: 'guess', value: '2023-06-10' }, online, deadline - 1);
+  assert.throws(
+    () => applyCommand(s, others[1], { type: 'guess', value: '2023-06-10' }, online, deadline),
+    /time is up/i,
+  );
+  expireRound(s, deadline);
+  assert.deepEqual(s.game!.results[0].awards, { [others[0]]: 3 });
+});
+
+for (const mode of ['voice', 'chat'] as const) {
+  test(`${mode}: every explanation gets its own voting deadline, with abstentions on timeout`, () => {
+    const { s, others, online } = fixture(mode);
+    const now = Date.now();
+    for (const id of others)
+      applyCommand(s, id, { type: 'guess', value: `Explanation from ${id}` }, online, now);
+    const g = s.game!;
+    assert.equal(g.phase, 'judge');
+    assert.equal(g.deadlineAt, now + 30_000);
+    for (let i = 0; i < others.length; i++) {
+      const key = phaseKey(g);
+      const deadline: number = g.deadlineAt!;
+      expireRound(s, deadline);
+      assert.notEqual(phaseKey(g), key);
+      if (i < others.length - 1) assert.equal(g.deadlineAt, deadline + 30_000);
+    }
+    assert.equal(g.phase, 'reveal');
+    assert.equal(g.deadlineAt, undefined);
+    assert.equal(g.results[0].judgements?.length, others.length);
+    assert.ok(g.results[0].judgements!.every((j) => !j.accepted && j.yes === 0 && j.no === 0));
+    assert.deepEqual(g.results[0].awards, {});
+  });
+}
 for (const mode of MODES) {
   test(`${mode}: two connected players cannot choose a game, three can`, () => {
     const s = freshSession();

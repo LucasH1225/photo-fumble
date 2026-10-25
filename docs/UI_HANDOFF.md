@@ -1,5 +1,8 @@
 # Photo Fumble — UI handoff
 
+> Historical design/research snapshot. The 25 October room-code update supersedes
+> earlier single-lobby restrictions. Current behavior is defined in [PRD.md](PRD.md).
+
 Use this brief for the UI agent working alongside the main chat, or as context in a
 separate UI chat. The user wants to discuss design choices in the main conversation
 while an agent researches and prepares UI work.

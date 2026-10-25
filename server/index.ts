@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { createServer } from 'node:http';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import cookieParser from 'cookie-parser';
@@ -10,11 +10,10 @@ import { rateLimit } from 'express-rate-limit';
 import multer from 'multer';
 import { Server } from 'socket.io';
 import { z } from 'zod';
-import { createRepository } from './repository.js';
-import { GameService } from './service.js';
-import { GameError, mediaKeyFor, requireRule } from './engine.js';
-import { byteRange, processMedia } from './media.js';
-import { MODES, type Asset, type Envelope } from '../shared/types.js';
+import { GameError, requireRule } from './engine.js';
+import { RoomManager, RoomError, roomView, type Room } from './rooms.js';
+import { registerRoomRoutes, roomPlayer } from './room-routes.js';
+import { MODES, type Envelope } from '../shared/types.js';
 
 const production = process.env.NODE_ENV === 'production';
 const port = Number(process.env.PORT || 3001);
@@ -36,9 +35,8 @@ if (!secret) {
 }
 if (secret.length < 32 || (production && secret.startsWith('replace-')))
   throw new Error('SESSION_SECRET must contain at least 32 random characters.');
-const repository = createRepository();
-const service = new GameService(repository);
-await service.init();
+const rooms = new RoomManager();
+await rooms.get();
 const app = express();
 if (production) app.set('trust proxy', 1);
 app.disable('x-powered-by');
@@ -81,167 +79,17 @@ app.use('/api', (req, res, next) => {
   }
   next();
 });
-function player(req: Request): string {
-  const id = req.signedCookies?.pf_session;
-  requireRule(typeof id === 'string' && Boolean(service.state.players[id]), 'Join the game first.');
-  return id;
-}
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
-app.post(
-  '/api/session/join',
-  rateLimit({ windowMs: 15 * 60_000, limit: 100, legacyHeaders: false }),
-  async (req, res) => {
-    await service.refresh();
-    const oldId = req.signedCookies?.pf_session;
-    const existing = typeof oldId === 'string' && Boolean(service.state.players[oldId]);
-    const id = existing ? (oldId as string) : randomUUID();
-    res.cookie('pf_session', id, {
-      signed: true,
-      httpOnly: true,
-      secure: production,
-      sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60_000,
-      path: '/',
-    });
-    if (!existing) await service.join(z.string().max(24).parse(req.body?.name), id);
-    res.json(service.view(id));
-  },
-);
-app.get('/api/session', async (req, res) => {
-  await service.refresh();
-  const id = req.signedCookies?.pf_session;
-  if (typeof id !== 'string' || !service.state.players[id]) {
-    res.status(401).json({ error: 'Join with your nickname.' });
-    return;
-  }
-  res.json(service.view(id));
-});
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024, files: 1, fields: 8, fieldSize: 20_000, parts: 10 },
-});
-const maskSchema = z
-  .array(
-    z
-      .object({
-        x: z.number().min(0).max(1),
-        y: z.number().min(0).max(1),
-        width: z.number().positive().max(1),
-        height: z.number().positive().max(1),
-      })
-      .refine((m) => m.x + m.width <= 1.001 && m.y + m.height <= 1.001),
-  )
-  .max(32);
-// Limit total buffered uploads before multer allocates them on the small instance.
-let activeUploads = 0;
-app.post(
-  '/api/uploads',
-  (req, res, next) => {
-    player(req);
-    if (activeUploads >= 3) {
-      res.status(429).json({ error: 'Other photos are processing. Try again in a moment.' });
-      return;
-    }
-    activeUploads++;
-    res.once('close', () => {
-      activeUploads--;
-    });
-    next();
-  },
-  upload.single('file'),
-  async (req, res) => {
-    const id = player(req);
-    const actionId = z.uuid().parse(req.body.actionId);
-    const prior = await repository.receipt(actionId, id);
-    if (prior) {
-      res.json(prior);
-      return;
-    }
-    const g = service.state.game;
-    requireRule(
-      g?.phase === 'prepare' && g.roster.includes(id) && req.body.gameId === g.id,
-      'This preparation has ended.',
-    );
-    requireRule(req.file, 'Choose a file to upload.');
-    const masks = maskSchema.parse(JSON.parse(req.body.masks || '[]'));
-    const fields = z
-      .object({
-        answer: z.string().max(1500).optional(),
-        falseStory: z.string().max(1500).optional(),
-        redacted: z.boolean(),
-      })
-      .parse({
-        answer: req.body.answer,
-        falseStory: req.body.falseStory,
-        redacted: req.body.redacted === 'true',
-      });
-    const processed = await processMedia(req.file.buffer, g.mode, masks);
-    const assetId = randomUUID();
-    const prefix = `${process.env.SESSION_NAMESPACE || 'local'}/${g.id}/${assetId}`;
-    const asset: Asset = {
-      id: assetId,
-      gameId: g.id,
-      ownerId: id,
-      key: `${prefix}.${processed.extension}`,
-      mime: processed.mime,
-      ...(processed.blur ? { blurKey: `${prefix}-blur.webp` } : {}),
-    };
-    const keys = [asset.key, ...(asset.blurKey ? [asset.blurKey] : [])];
-    let savingState = false;
-    try {
-      await repository.put(asset.key, processed.data, processed.mime);
-      if (processed.blur && asset.blurKey)
-        await repository.put(asset.blurKey, processed.blur, 'image/webp');
-      savingState = true;
-      const receipt = await service.submission(id, actionId, asset, fields);
-      if (!service.state.assets[assetId]) await repository.remove(keys).catch(() => {});
-      res.json(receipt);
-    } catch (error) {
-      // A commit can succeed while its HTTP response is lost. Never remove a committed file.
-      const committed = await repository.receipt(actionId, id).catch(() => undefined);
-      if (committed) {
-        res.json(committed);
-        return;
-      }
-      if (
-        (!savingState || (error instanceof GameError && error.code === 'INVALID_ACTION')) &&
-        !service.state.assets[assetId]
-      )
-        await repository.remove(keys).catch(() => {});
-      throw error;
-    }
-  },
-);
-app.get('/api/media/:assetId', async (req, res) => {
-  const permitted = mediaKeyFor(service.state, player(req), String(req.params.assetId));
-  const media = await repository.get(permitted.key);
-  if (typeof media === 'string') {
-    res.redirect(302, media);
-    return;
-  }
-  res.type(permitted.mime).setHeader('Accept-Ranges', 'bytes');
-  if (req.headers.range) {
-    const range = byteRange(req.headers.range, media.length);
-    if (!range) {
-      res.status(416).setHeader('Content-Range', `bytes */${media.length}`);
-      res.end();
-      return;
-    }
-    const [start, end] = range;
-    res.status(206).setHeader('Content-Range', `bytes ${start}-${end}/${media.length}`);
-    res.send(media.subarray(start, end + 1));
-    return;
-  }
-  res.send(media);
-});
+registerRoomRoutes(app, rooms, production);
 const commands = z.discriminatedUnion('type', [
   z.object({
     type: z.enum([
       'elect',
       'start',
       'cancel',
+      'lobby',
       'open',
       'close',
       'next',
@@ -251,6 +99,7 @@ const commands = z.discriminatedUnion('type', [
     ]),
   }),
   z.object({ type: z.literal('choose'), mode: z.enum(MODES) }),
+  z.object({ type: z.literal('setHost'), targetId: z.uuid() }),
   z.object({ type: z.literal('guess'), value: z.string().max(1000) }),
   z.object({ type: z.literal('judge'), yes: z.boolean() }),
   z.object({ type: z.literal('clue'), value: z.string().max(300) }),
@@ -271,27 +120,44 @@ const io = new Server(http, {
 });
 io.use(async (socket, next) => {
   try {
-    await service.refresh();
-    const raw = socket.request.headers.cookie
-      ?.split(';')
-      .map((c) => c.trim())
-      .find((c) => c.startsWith('pf_session='))
-      ?.slice('pf_session='.length);
-    const id = raw ? cookieParser.signedCookie(decodeURIComponent(raw), secret!) : false;
-    requireRule(typeof id === 'string' && service.state.players[id], 'Join the game first.');
-    socket.data.playerId = id;
+    const requestedCode = socket.handshake.auth?.roomCode;
+    requireRule(
+      requestedCode === undefined || typeof requestedCode === 'string',
+      'Invalid room code.',
+    );
+    await rooms.use(requestedCode, (room) => {
+      const raw = socket.request.headers.cookie
+        ?.split(';')
+        .map((c) => c.trim())
+        .find((c) => c.startsWith('pf_session='))
+        ?.slice('pf_session='.length);
+      const identity = raw ? cookieParser.signedCookie(decodeURIComponent(raw), secret!) : false;
+      socket.data.playerId = roomPlayer(room, identity);
+      socket.data.room = room;
+    });
     next();
   } catch {
     next(new Error('Join the game first.'));
   }
 });
-service.changed = () => {
-  for (const socket of io.sockets.sockets.values()) {
-    if (service.state.players[socket.data.playerId])
-      socket.emit('state', service.view(socket.data.playerId));
+rooms.changed = (room) => {
+  const members = io.sockets.adapter.rooms.get(room.namespace);
+  for (const socketId of members ?? []) {
+    const socket = io.sockets.sockets.get(socketId);
+    if (!socket || socket.data.room !== room) continue;
+    if (room.service.state.players[socket.data.playerId])
+      socket.emit('state', roomView(room, socket.data.playerId));
     else socket.disconnect(true);
   }
 };
+const roundClock = setInterval(async () => {
+  try {
+    await rooms.tick();
+  } catch (error) {
+    errorReceipt(error);
+  }
+}, 250);
+roundClock.unref();
 const actionWindows = new Map<string, { time: number; count: number }>();
 function errorReceipt(error: unknown) {
   if (error instanceof GameError) return { ok: false, error: error.message, code: error.code };
@@ -320,15 +186,22 @@ function errorReceipt(error: unknown) {
 }
 io.on('connection', (socket) => {
   const id = socket.data.playerId as string;
+  const room = socket.data.room as Room;
+  const service = room.service;
+  const actionKey = `${room.namespace}:${id}`;
+  room.connections++;
+  room.lastUsed = Date.now();
+  socket.join(room.namespace);
   service.online.add(id);
   service.changed();
   socket.on('command', async (raw, ack) => {
     if (typeof ack !== 'function') return;
+    const release = rooms.retain(room);
     try {
-      let window = actionWindows.get(id);
+      let window = actionWindows.get(actionKey);
       if (!window || Date.now() - window.time > 10_000) {
         window = { time: Date.now(), count: 0 };
-        actionWindows.set(id, window);
+        actionWindows.set(actionKey, window);
       }
       requireRule(++window.count <= 120, 'Too many actions. Wait a moment.');
       const envelope = envelopeSchema.parse(raw) as Envelope;
@@ -336,13 +209,19 @@ io.on('connection', (socket) => {
       ack(receipt);
     } catch (error) {
       ack(errorReceipt(error));
-      socket.emit('state', service.view(id));
+      socket.emit('state', roomView(room, id));
+    } finally {
+      release();
     }
   });
   socket.on('disconnect', () => {
-    if (![...io.sockets.sockets.values()].some((s) => s.data.playerId === id)) {
+    room.connections--;
+    room.lastUsed = Date.now();
+    if (
+      ![...io.sockets.sockets.values()].some((s) => s.data.room === room && s.data.playerId === id)
+    ) {
       service.online.delete(id);
-      actionWindows.delete(id);
+      actionWindows.delete(actionKey);
     }
     service.changed();
   });
@@ -358,7 +237,9 @@ app.get('/{*path}', (req, res) => {
 });
 app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
   const body = errorReceipt(error);
-  res.status(body.code === 'SAVE_FAILED' ? 503 : 400).json(body);
+  res
+    .status(error instanceof RoomError ? error.status : body.code === 'SAVE_FAILED' ? 503 : 400)
+    .json(body);
 });
 http.listen(port, '0.0.0.0', () => {
   console.log(
@@ -367,6 +248,7 @@ http.listen(port, '0.0.0.0', () => {
 });
 for (const signal of ['SIGTERM', 'SIGINT'])
   process.on(signal, () => {
+    clearInterval(roundClock);
     io.close();
     http.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 5000).unref();

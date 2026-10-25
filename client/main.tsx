@@ -112,7 +112,106 @@ function Panel({ children, className = '' }: { children: ReactNode; className?: 
   return <section className={`panel ${className}`}>{children}</section>;
 }
 
+function roomApi(view: PlayerView) {
+  return view.room ? `/api/rooms/${view.room.code}` : '/api';
+}
 function App() {
+  const [path, setPath] = useState(location.pathname);
+  const navigate = useCallback((next: string) => {
+    history.pushState(null, '', next);
+    setPath(next);
+    window.scrollTo(0, 0);
+  }, []);
+  useEffect(() => {
+    const update = () => setPath(location.pathname);
+    window.addEventListener('popstate', update);
+    return () => window.removeEventListener('popstate', update);
+  }, []);
+  const code = /^\/r\/(\d{6})\/?$/.exec(path)?.[1];
+  if (code !== undefined || path === '/legacy')
+    return <RoomApp key={path} code={code} navigate={navigate} />;
+  return <Home navigate={navigate} />;
+}
+function Home({ navigate }: { navigate: (path: string) => void }) {
+  const [error, setError] = useState('');
+  const [legacyAvailable, setLegacyAvailable] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/session')
+      .then((r) => {
+        if (!cancelled) setLegacyAvailable(r.ok);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return (
+    <>
+      <header className="topbar">
+        <a className="brand" href="/">
+          <Aperture />
+          Photo Fumble
+        </a>
+        <span>A party game for your people</span>
+      </header>
+      {error ? (
+        <div className="error-banner" role="alert">
+          {error}
+        </div>
+      ) : null}
+      <Join onJoin={(view) => navigate(`/r/${view.room!.code}`)} onError={setError} />
+      {legacyAvailable ? (
+        <div className="legacy-resume">
+          <Button secondary onClick={() => navigate('/legacy')}>
+            Resume previous game
+          </Button>
+        </div>
+      ) : null}
+      <footer className="footer">
+        <span>Good friends. Questionable memories.</span>
+        <span>Five ways to remember differently.</span>
+      </footer>
+    </>
+  );
+}
+function RoomTools({ code, navigate }: { code?: string; navigate: (path: string) => void }) {
+  const [status, setStatus] = useState('');
+  async function copy() {
+    const url = new URL(`/r/${code}`, location.origin).href;
+    try {
+      await navigator.clipboard.writeText(url);
+      setStatus('Invite link copied.');
+    } catch {
+      setStatus(`Copy this invite link: ${url}`);
+    }
+  }
+  return (
+    <section className="room-toolbar" aria-label="Your room">
+      <div>
+        {code ? (
+          <>
+            Room <strong data-testid="room-code">{code}</strong>
+          </>
+        ) : (
+          <strong>Previous shared game</strong>
+        )}
+      </div>
+      <div className="room-toolbar-actions">
+        {code ? (
+          <Button secondary onClick={() => void copy()}>
+            Copy invite link
+          </Button>
+        ) : null}
+        <Button secondary onClick={() => navigate('/')}>
+          Leave room
+        </Button>
+      </div>
+      {status ? <p role="status">{status}</p> : null}
+    </section>
+  );
+}
+function RoomApp({ code, navigate }: { code?: string; navigate: (path: string) => void }) {
   const [view, setView] = useState<PlayerView>();
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
@@ -123,10 +222,16 @@ function App() {
   latest.current = view;
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/session')
+    fetch(code === undefined ? '/api/session' : `/api/rooms/${code}/session`)
       .then(async (r) => {
-        if (r.status === 401) return;
-        if (!r.ok) throw new Error('The game server is unavailable. Try refreshing.');
+        if (r.status === 401) {
+          if (code === undefined) navigate('/');
+          return;
+        }
+        if (!r.ok) {
+          const body = await r.json();
+          throw new Error(body.error || 'The game server is unavailable. Try refreshing.');
+        }
         const state = await r.json();
         if (!cancelled) setView(state);
       })
@@ -143,7 +248,7 @@ function App() {
   const me = view?.me.id;
   useEffect(() => {
     if (!me) return;
-    const client = io({ reconnection: true });
+    const client = io({ reconnection: true, auth: { roomCode: code } });
     socket.current = client;
     client.on('connect', () => {
       setConnected(true);
@@ -155,13 +260,13 @@ function App() {
       setError('Reconnecting to your game. If it was reset, refresh to join again.');
     });
     client.on('state', (state: PlayerView) => {
-      setView(state);
+      if (state.room?.code === code) setView(state);
     });
     return () => {
       client.disconnect();
       socket.current = undefined;
     };
-  }, [me]);
+  }, [me, code]);
   const send: Send = useCallback(async (command) => {
     const state = latest.current;
     const client = socket.current;
@@ -252,13 +357,20 @@ function App() {
           {connected ? 'Connected.' : 'Reconnecting.'}{' '}
           {view.game
             ? `${MODE_INFO[view.game.mode].name}. ${phaseTitle(view.game)} ${view.game.phase === 'prepare' ? `${view.game.ready.length} ready.` : `${view.game.submitted} responses locked.`}`
-            : 'Waiting in the shared lobby.'}
+            : 'Waiting in your room lobby.'}
         </div>
       ) : null}
       {!view ? (
-        <Join onJoin={setView} onError={setError} />
+        <Join
+          code={code}
+          onJoin={(next) =>
+            next.room?.code === code ? setView(next) : navigate(`/r/${next.room!.code}`)
+          }
+          onError={setError}
+        />
       ) : (
         <main className="app-main">
+          <RoomTools code={code} navigate={navigate} />
           <div className="page-heading">
             <div>
               <p className="step-note">
@@ -280,14 +392,17 @@ function App() {
               {view.players.filter((p) => p.online).length} friends here
             </span>
           </div>
-          <Roster view={view} />
+          <Roster view={view} send={send} disabled={!connected || busy} />
           {!connected ? (
             <p className="notice" role="status">
               Reconnecting… Your saved place is safe. Actions will resume when you’re connected.
             </p>
           ) : null}
           {view.hostId && !view.players.find((p) => p.id === view.hostId)?.online ? (
-            <p className="notice">Waiting for host {nameOf(view, view.hostId)} to reconnect.</p>
+            <div className="notice">
+              <p>{nameOf(view, view.hostId)} is offline. Choose a new host to keep playing.</p>
+              <HostControls view={view} send={send} disabled={!connected || busy} />
+            </div>
           ) : null}
           <div className="layout">
             <div className="main-column">
@@ -305,8 +420,9 @@ function App() {
                   <h2>One link. All your friends.</h2>
                   <p>
                     Gather at least {MIN_PLAYERS} people, each on their own device. Then we’ll pick
-                    a host at random. The host plays too.
+                    a host at random, or choose someone below. The host plays too.
                   </p>
+                  <HostControls view={view} send={send} disabled={!connected || busy} />
                   <Button
                     disabled={
                       !connected ||
@@ -318,7 +434,7 @@ function App() {
                     Everyone’s here · pick a host
                   </Button>
                   <p className="support">
-                    Friends can play together or from anywhere. No room code needed.
+                    Share your room code or invite link. Friends can play together or from anywhere.
                   </p>
                 </Panel>
               ) : !view.game ? (
@@ -336,6 +452,21 @@ function App() {
               ) : view.game.phase === 'results' ? (
                 <>
                   <Results view={view} />
+                  <section className="results-navigation" aria-label="After the game">
+                    {view.hostId === view.me.id ? (
+                      <Button
+                        secondary
+                        disabled={!connected || busy}
+                        onClick={() => void send({ type: 'lobby' })}
+                      >
+                        Back to lobby
+                      </Button>
+                    ) : (
+                      <p className="support">
+                        The host can return everyone to the lobby or choose the next game below.
+                      </p>
+                    )}
+                  </section>
                   <ModePicker view={view} send={send} disabled={!connected || busy} />
                 </>
               ) : (
@@ -369,23 +500,36 @@ function phaseTitle(g: ViewGame) {
 function Join({
   onJoin,
   onError,
+  code,
 }: {
+  code?: string;
   onJoin: (view: PlayerView) => void;
   onError: (error: string) => void;
 }) {
   const [name, setName] = useState('');
+  const [entry, setEntry] = useState<'join' | 'create'>('join');
+  const [roomCode, setRoomCode] = useState(code ?? '');
   const [busy, setBusy] = useState(false);
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
-      onJoin(
-        await api<PlayerView>('/api/session/join', {
+      if (entry === 'create') {
+        const result = await api<{ code: string; view: PlayerView }>('/api/rooms', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name }),
-        }),
-      );
+        });
+        onJoin(result.view);
+      } else {
+        onJoin(
+          await api<PlayerView>(`/api/rooms/${roomCode}/session/join`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
+          }),
+        );
+      }
     } catch (e) {
       onError((e as Error).message);
     } finally {
@@ -418,8 +562,44 @@ function Join({
       </section>
       <Panel className="join-panel">
         <h2>Find your people.</h2>
-        <p>One website, one shared game. Join with a nickname your friends will recognize.</p>
+        <p>Your group, your room. Join with a nickname your friends will recognize.</p>
+        <div className="room-entry-actions" aria-label="Room action">
+          <Button
+            type="button"
+            secondary
+            aria-pressed={entry === 'join'}
+            disabled={busy}
+            onClick={() => setEntry('join')}
+          >
+            Join a room
+          </Button>
+          <Button
+            type="button"
+            secondary
+            aria-pressed={entry === 'create'}
+            disabled={busy}
+            onClick={() => setEntry('create')}
+          >
+            Create a room
+          </Button>
+        </div>
         <form onSubmit={submit}>
+          {entry === 'join' ? (
+            <>
+              <label htmlFor="room-code">Room code</label>
+              <input
+                id="room-code"
+                value={roomCode}
+                onChange={(e) => setRoomCode(e.target.value.replace(/[^0-9]/g, ''))}
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                autoComplete="off"
+                placeholder="Six-digit code"
+                required
+              />
+            </>
+          ) : null}
           <label htmlFor="nickname">Your nickname</label>
           <input
             id="nickname"
@@ -430,10 +610,19 @@ function Join({
             autoComplete="nickname"
             required
           />
-          <Button disabled={busy}>{busy ? 'Joining…' : 'Join friends'}</Button>
+          <Button disabled={busy}>
+            {busy
+              ? entry === 'create'
+                ? 'Creating…'
+                : 'Joining…'
+              : entry === 'create'
+                ? 'Create room'
+                : 'Join room'}
+          </Button>
         </form>
         <p className="support">
-          You’ll need at least {MIN_PLAYERS} players. Everyone joins on their own phone or computer.
+          You’ll need at least {MIN_PLAYERS} players in your room. Everyone joins on their own phone
+          or computer.
         </p>
       </Panel>
     </main>
@@ -512,7 +701,71 @@ function ModePicker({ view, send, disabled }: { view: PlayerView; send: Send; di
     </section>
   );
 }
-function Roster({ view }: { view: PlayerView }) {
+function HostControls({
+  view,
+  send,
+  disabled,
+}: {
+  view: PlayerView;
+  send: Send;
+  disabled: boolean;
+}) {
+  const [targetId, setTargetId] = useState('');
+  const selectId = useId();
+  const active = view.game && view.game.phase !== 'results' ? view.game : undefined;
+  const hostOnline = view.players.some((p) => p.id === view.hostId && p.online);
+  const canChange =
+    (!view.hostId || view.hostId === view.me.id || !hostOnline) &&
+    (!active || active.roster.includes(view.me.id));
+  if (!canChange) return null;
+  const candidates = view.players.filter(
+    (p) => p.online && p.id !== view.hostId && (!active || active.roster.includes(p.id)),
+  );
+  const validTarget = candidates.some((p) => p.id === targetId);
+  return (
+    <div className="host-controls">
+      <label htmlFor={selectId}>{view.hostId ? 'Change host' : 'Choose a host'}</label>
+      <div className="host-select-row">
+        <select
+          id={selectId}
+          value={validTarget ? targetId : ''}
+          disabled={disabled || !candidates.length}
+          onChange={(e) => setTargetId(e.target.value)}
+        >
+          <option value="">Select a player</option>
+          {candidates.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+              {p.id === view.me.id ? ' (you)' : ''}
+            </option>
+          ))}
+        </select>
+        <Button
+          secondary
+          disabled={disabled || !validTarget}
+          onClick={() => void send({ type: 'setHost', targetId })}
+        >
+          {view.hostId ? 'Make host' : 'Choose host'}
+        </Button>
+        {view.hostId ? (
+          <Button
+            secondary
+            disabled={disabled || !candidates.length}
+            onClick={() => void send({ type: 'elect' })}
+          >
+            Pick a random host
+          </Button>
+        ) : null}
+      </div>
+      <p className="support">
+        {view.hostId
+          ? 'Pass control to a connected player. The game and scores stay in place.'
+          : 'The host chooses the mode and controls the flow. You can change hosts later from View players.'}
+      </p>
+    </div>
+  );
+}
+function Roster({ view, send, disabled }: { view: PlayerView; send: Send; disabled: boolean }) {
   const g = view.game;
   return (
     <details className="roster">
@@ -570,8 +823,9 @@ function Roster({ view }: { view: PlayerView }) {
         <p className="support">
           {view.hostId
             ? `${nameOf(view, view.hostId)} controls the flow. Scores belong to this game only.`
-            : 'Your host will be picked at random and stay with you.'}
+            : 'Choose your host below, or let us pick someone at random.'}
         </p>
+        {view.hostId ? <HostControls view={view} send={send} disabled={disabled} /> : null}
       </div>
     </details>
   );
@@ -766,7 +1020,7 @@ function Prepare({
     data.set('masks', JSON.stringify(masks));
     data.set('redacted', String(redacted));
     try {
-      await api('/api/uploads', { method: 'POST', body: data });
+      await api(`${roomApi(view)}/uploads`, { method: 'POST', body: data });
       retryId.current = undefined;
       setFile(undefined);
       setPreview('');
@@ -831,11 +1085,11 @@ function Prepare({
             )
           ) : own ? (
             audio ? (
-              <audio controls preload="metadata" src={`/api/media/${own.assetId}`} />
+              <audio controls preload="metadata" src={`${roomApi(view)}/media/${own.assetId}`} />
             ) : (
               <img
                 className="upload-preview"
-                src={`/api/media/${own.assetId}`}
+                src={`${roomApi(view)}/media/${own.assetId}`}
                 alt="Your prepared upload"
               />
             )
@@ -923,7 +1177,7 @@ function Media({ view, onLoaded }: { view: PlayerView; onLoaded?: () => void }) 
   const [failed, setFailed] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const previewTitle = useId();
-  const url = `/api/media/${g.assetId}?view=${g.blurred ? 'blurred' : 'clear'}&retry=${retry}`;
+  const url = `${roomApi(view)}/media/${g.assetId}?view=${g.blurred ? 'blurred' : 'clear'}&retry=${retry}`;
   useEffect(() => {
     dialog.current?.close();
   }, [g.phaseKey, g.assetId]);
@@ -1006,6 +1260,42 @@ function Media({ view, onLoaded }: { view: PlayerView; onLoaded?: () => void }) 
     </div>
   );
 }
+function Countdown({
+  deadlineAt,
+  serverTime,
+  phase,
+}: {
+  deadlineAt: number;
+  serverTime: number;
+  phase: ViewGame['phase'];
+}) {
+  const initial = Math.max(0, Math.ceil((deadlineAt - serverTime) / 1000));
+  const [seconds, setSeconds] = useState(initial);
+  useEffect(() => {
+    const receivedAt = performance.now();
+    const update = () =>
+      setSeconds(
+        Math.max(0, Math.ceil((deadlineAt - serverTime - (performance.now() - receivedAt)) / 1000)),
+      );
+    update();
+    const interval = window.setInterval(update, 250);
+    return () => window.clearInterval(interval);
+  }, [deadlineAt, serverTime]);
+  const label = phase === 'guess' ? 'Guessing' : phase === 'discuss' ? 'Discussion' : 'Voting';
+  return (
+    <div className={`round-countdown${seconds <= 10 ? ' urgent' : ''}`}>
+      <div>
+        <strong>{label} time</strong>
+        <p className="support">
+          {seconds ? 'Moves on automatically when time runs out.' : 'Time’s up. Moving on…'}
+        </p>
+      </div>
+      <span role="timer" aria-live="off" aria-label={`${label} time remaining`}>
+        {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
+      </span>
+    </div>
+  );
+}
 function Play({ view, send, disabled }: { view: PlayerView; send: Send; disabled: boolean }) {
   const g = view.game!;
   const isHost = view.hostId === view.me.id;
@@ -1025,6 +1315,14 @@ function Play({ view, send, disabled }: { view: PlayerView; send: Send; disabled
       <div className="play-grid">
         <Media view={view} onLoaded={mediaLoaded} />
         <Panel className="task-panel">
+          {g.deadlineAt !== undefined ? (
+            <Countdown
+              key={g.phaseKey}
+              deadlineAt={g.deadlineAt}
+              serverTime={view.serverTime}
+              phase={g.phase}
+            />
+          ) : null}
           {g.phase === 'preview' ? (
             <>
               <h2>A moment to remember.</h2>

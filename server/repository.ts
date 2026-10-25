@@ -1,4 +1,5 @@
-import { mkdir, readFile, rename, writeFile, unlink } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile, unlink, link } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { freshSession, GameError } from './engine.js';
@@ -11,6 +12,8 @@ export interface CommitAction {
 }
 export interface Repository {
   load(): Promise<Session>;
+  loadExisting(): Promise<Session | undefined>;
+  create(state: Session): Promise<boolean>;
   receipt(id: string, playerId: string): Promise<Receipt | undefined>;
   commit(expectedVersion: number, state: Session, action: CommitAction): Promise<void>;
   put(key: string, data: Buffer, mime: string): Promise<void>;
@@ -31,13 +34,34 @@ export class LocalRepository implements Repository {
     return path.resolve(this.root, this.namespace);
   }
   async load() {
-    await mkdir(this.directory, { recursive: true });
+    return (await this.loadExisting()) ?? freshSession();
+  }
+  async loadExisting() {
     try {
       this.data = JSON.parse(await readFile(path.join(this.directory, 'session.json'), 'utf8'));
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+      this.data = { state: freshSession(), receipts: {} };
+      return undefined;
     }
     return structuredClone(this.data.state);
+  }
+  async create(state: Session) {
+    await mkdir(this.directory, { recursive: true });
+    const next: LocalData = { state, receipts: {} };
+    const temp = path.join(this.directory, `create-${randomUUID()}.tmp`);
+    await writeFile(temp, JSON.stringify(next), { mode: 0o600 });
+    try {
+      // Linking a complete file reserves the name atomically without overwriting it.
+      await link(temp, path.join(this.directory, 'session.json'));
+      this.data = structuredClone(next);
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+      throw error;
+    } finally {
+      await unlink(temp);
+    }
   }
   async receipt(id: string, playerId: string) {
     return this.data.receipts[`${playerId}:${id}`];
@@ -49,6 +73,7 @@ export class LocalRepository implements Repository {
       state,
       receipts: { ...this.data.receipts, [`${action.playerId}:${action.id}`]: action.receipt },
     };
+    await mkdir(this.directory, { recursive: true });
     const temp = path.join(this.directory, 'session.tmp');
     await writeFile(temp, JSON.stringify(next), { mode: 0o600 });
     await rename(temp, path.join(this.directory, 'session.json'));
@@ -90,13 +115,24 @@ export class SupabaseRepository implements Repository {
     });
   }
   async load(): Promise<Session> {
+    return (await this.loadExisting()) ?? freshSession();
+  }
+  async loadExisting(): Promise<Session | undefined> {
     const { data, error } = await this.client
       .from('pf_sessions')
       .select('state')
       .eq('namespace', this.namespace)
       .maybeSingle();
     if (error) throw error;
-    return data?.state ?? freshSession();
+    return data?.state;
+  }
+  async create(state: Session) {
+    const { error } = await this.client
+      .from('pf_sessions')
+      .insert({ namespace: this.namespace, state });
+    if (error?.code === '23505') return false;
+    if (error) throw error;
+    return true;
   }
   async receipt(id: string, playerId: string): Promise<Receipt | undefined> {
     const { data, error } = await this.client
@@ -140,8 +176,7 @@ export class SupabaseRepository implements Repository {
     if (error) throw error;
   }
 }
-export function createRepository(): Repository {
-  const namespace = process.env.SESSION_NAMESPACE || 'local';
+export function createRepository(namespace = process.env.SESSION_NAMESPACE || 'local'): Repository {
   if (!/^[a-zA-Z0-9_-]{1,64}$/.test(namespace))
     throw new Error('SESSION_NAMESPACE must use letters, numbers, hyphens, or underscores.');
   const url = process.env.SUPABASE_URL;

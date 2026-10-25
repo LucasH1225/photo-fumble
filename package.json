@@ -14,7 +14,8 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "test:e2e": "E2E_PLAYERS=3 playwright test && E2E_PLAYERS=4 playwright test",
     "test:online": "node --import tsx scripts/check-online.ts",
-    "session:reset": "node --import tsx scripts/reset.ts"
+    "session:reset": "node --import tsx scripts/reset.ts",
+    "test:e2e:online": "E2E_PLAYERS=3 playwright test --config=playwright.online.config.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.0.0",

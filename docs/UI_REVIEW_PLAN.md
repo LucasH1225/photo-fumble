@@ -1,5 +1,8 @@
 # Photo Fumble — visual review plan
 
+> Historical design/research snapshot. The 25 October room-code update supersedes
+> earlier single-lobby restrictions. Current behavior is defined in [PRD.md](PRD.md).
+
 Prepared 24 October 2026. **Design previews complete; the multiplayer game is not implemented.**
 The deliverable is a local HTML concept gallery with exported screen images. It does
 not connect to a game server, provision services, or publish a website. All player

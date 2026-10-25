@@ -170,19 +170,72 @@ function closeGuesses(g: Game): void {
     }
   } else finish(g);
 }
+function stageDuration(g: Game): number | undefined {
+  if (g.phase === 'guess') return g.mode === 'voice' ? 90_000 : 60_000;
+  if (g.phase === 'discuss') return 60_000;
+  if (g.phase === 'judge' || g.phase === 'vote') return 30_000;
+}
+function updateDeadline(g: Game, previousKey: string, now: number): void {
+  const duration = stageDuration(g);
+  if (duration === undefined) delete g.deadlineAt;
+  else if (phaseKey(g) !== previousKey || g.deadlineAt === undefined) g.deadlineAt = now + duration;
+}
+// Called by the server clock, including after recovery. Only one stage advances
+// per tick, so a newly opened ballot always receives its full time allowance.
+export function expireRound(state: Session, now = Date.now()): boolean {
+  const g = state.game;
+  if (!g || stageDuration(g) === undefined) return false;
+  const previousKey = phaseKey(g);
+  if (g.deadlineAt === undefined) {
+    updateDeadline(g, previousKey, now);
+    return true;
+  }
+  if (now < g.deadlineAt) return false;
+  if (g.phase === 'guess') closeGuesses(g);
+  else if (g.phase === 'judge') judgeNext(g);
+  else if (g.phase === 'discuss') g.phase = 'vote';
+  else if (g.phase === 'vote') finish(g);
+  updateDeadline(g, previousKey, now);
+  return true;
+}
+function requireHostChange(state: Session, playerId: string, online: Set<string>): string[] {
+  requireRule(
+    !state.hostId || playerId === state.hostId || !online.has(state.hostId),
+    'Only the current host can change the host while they are connected.',
+  );
+  const active = state.game && state.game.phase !== 'results' ? state.game : undefined;
+  requireRule(!active || active.roster.includes(playerId), 'You are in for the next game.');
+  return Object.keys(state.players).filter(
+    (id) => online.has(id) && (!active || active.roster.includes(id)),
+  );
+}
 export function applyCommand(
   state: Session,
   playerId: string,
   command: Command,
   online: Set<string>,
+  now = Date.now(),
 ): void {
   requireRule(state.players[playerId], 'Join the game first.');
   if (command.type === 'elect') {
+    const candidates = requireHostChange(state, playerId, online);
     requireRule(
-      !state.hostId && online.size >= MIN_PLAYERS,
+      candidates.length >= (state.hostId ? 1 : MIN_PLAYERS),
       `Gather at least ${MIN_PLAYERS} friends before choosing a host.`,
     );
-    state.hostId = shuffle([...online])[0];
+    state.hostId = shuffle(candidates)[0];
+    return;
+  }
+  if (command.type === 'setHost') {
+    const candidates = requireHostChange(state, playerId, online);
+    requireRule(candidates.includes(command.targetId), 'Choose a connected player in this game.');
+    state.hostId = command.targetId;
+    return;
+  }
+  if (command.type === 'lobby') {
+    requireRule(playerId === state.hostId, 'Only the host can return everyone to the lobby.');
+    requireRule(state.game?.phase === 'results', 'Finish the current game first.');
+    delete state.game;
     return;
   }
   if (command.type === 'choose') {
@@ -217,6 +270,9 @@ export function applyCommand(
   }
   const g = state.game;
   requireRule(g && g.roster.includes(playerId), 'You are in for the next game.');
+  const previousKey = phaseKey(g);
+  if (['guess', 'judge', 'clue', 'vote'].includes(command.type))
+    requireRule(g.deadlineAt === undefined || now < g.deadlineAt, 'Time is up for this stage.');
   if (['start', 'cancel', 'open', 'close', 'next', 'skip', 'skipItem'].includes(command.type))
     requireRule(playerId === state.hostId, 'Only the host can do that.');
   switch (command.type) {
@@ -315,6 +371,7 @@ export function applyCommand(
     default:
       throw new GameError('Unknown action.');
   }
+  updateDeadline(g, previousKey, now);
 }
 export function viewFor(state: Session, id: string, online: Set<string>): PlayerView {
   const me = state.players[id];
@@ -322,6 +379,7 @@ export function viewFor(state: Session, id: string, online: Set<string>): Player
   const g = state.game;
   const view: PlayerView = {
     version: state.version,
+    serverTime: Date.now(),
     me,
     hostId: state.hostId,
     players: Object.values(state.players).map((p) => ({ ...p, online: online.has(p.id) })),
@@ -333,6 +391,7 @@ export function viewFor(state: Session, id: string, online: Set<string>): Player
     mode: g.mode,
     phase: g.phase,
     phaseKey: phaseKey(g),
+    deadlineAt: g.deadlineAt,
     roster: g.roster,
     scores: g.scores,
     loaded: g.loaded,

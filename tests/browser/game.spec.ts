@@ -23,7 +23,8 @@ function recording() {
   return b;
 }
 async function state(page: Page): Promise<PlayerView> {
-  const response = await page.request.get('/api/session');
+  const code = new URL(page.url()).pathname.split('/')[2];
+  const response = await page.request.get(`/api/rooms/${code}/session`);
   expect(response.ok()).toBeTruthy();
   return response.json();
 }
@@ -49,6 +50,7 @@ test(`${playerCount} browsers play all five modes, refresh safely, and late arri
 }) => {
   const contexts: BrowserContext[] = [];
   const pages: Page[] = [];
+  let roomCode = '';
   const names = ['Maya', 'Jules', 'Noor the midnight friend', 'Eli'];
   const longStory =
     'We missed the last train. We had spent the evening by the sea, sharing a picnic and trying to photograph the sunset. Nobody checked the timetable until the station lights went out, so we stayed with a friend and caught the first train home the next morning.';
@@ -65,8 +67,14 @@ test(`${playerCount} browsers play all five modes, refresh safely, and late arri
     page.on('dialog', (dialog) => dialog.accept());
     await page.goto('/');
     if (i === 0) await capture(page, 'join-desktop');
+    if (i === 0) await page.getByRole('button', { name: 'Create a room', exact: true }).click();
+    else await page.getByLabel('Room code').fill(roomCode);
     await page.getByLabel('Your nickname').fill(names[i]);
-    await page.getByRole('button', { name: 'Join friends' }).click();
+    await page
+      .getByRole('button', { name: i === 0 ? 'Create room' : 'Join room', exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/r\/\d{6}$/);
+    if (i === 0) roomCode = new URL(page.url()).pathname.split('/')[2];
     await expect(page.getByText('Connected', { exact: true })).toBeVisible();
     if (i === 1)
       await expect(
@@ -84,6 +92,32 @@ test(`${playerCount} browsers play all five modes, refresh safely, and late arri
     const ids = initial.map((v) => v.me.id);
     const hostIndex = ids.indexOf(initial[0].hostId!);
     const host = pages[hostIndex];
+    // Keep a second three-player room preparing a different game throughout this walkthrough.
+    const otherPages: Page[] = [];
+    let otherCode = '';
+    for (let i = 0; i < 3; i++) {
+      const context = await browser.newContext();
+      contexts.push(context);
+      const page = await context.newPage();
+      otherPages.push(page);
+      await page.goto('/');
+      if (!i) await page.getByRole('button', { name: 'Create a room', exact: true }).click();
+      else await page.getByLabel('Room code').fill(otherCode);
+      await page.getByLabel('Your nickname').fill(names[i]);
+      await page
+        .getByRole('button', { name: !i ? 'Create room' : 'Join room', exact: true })
+        .click();
+      await expect(page.getByText('Connected', { exact: true })).toBeVisible();
+      if (!i) otherCode = new URL(page.url()).pathname.split('/')[2];
+    }
+    await otherPages[0].getByRole('button', { name: 'Everyone’s here · pick a host' }).click();
+    await expect.poll(async () => (await state(otherPages[0])).hostId).toBeTruthy();
+    const otherViews = await Promise.all(otherPages.map((page) => state(page)));
+    const otherHost = otherPages[otherViews.findIndex((v) => v.me.id === v.hostId)];
+    await otherHost.getByRole('button', { name: /Memory Bluff/ }).click();
+    await otherHost.getByRole('button', { name: 'Prepare this game', exact: true }).click();
+    await waitPhase(otherHost, 'prepare');
+    const otherBefore = await state(otherHost);
     const image = await readFile('ui-concepts/assets/sample-memory.jpg');
     for (const mode of MODES) {
       const beforeChoice = await state(host);
@@ -111,7 +145,7 @@ test(`${playerCount} browsers play all five modes, refresh safely, and late arri
           .poll(async () => (await state(host)).players.filter((p) => p.online).length)
           .toBe(2);
         await expect(prepare).toBeDisabled();
-        await guest.goto('/');
+        await guest.goto(`/r/${roomCode}`);
         await expect(guest.getByText('Connected', { exact: true })).toBeVisible();
         await expect
           .poll(async () => (await state(host)).players.filter((p) => p.online).length)
@@ -127,9 +161,9 @@ test(`${playerCount} browsers play all five modes, refresh safely, and late arri
       if (mode === 'quiz') {
         late = await browser.newContext();
         const newcomer = await late.newPage();
-        await newcomer.goto('/');
+        await newcomer.goto(`/r/${roomCode}`);
         await newcomer.getByLabel('Your nickname').fill('Sam');
-        await newcomer.getByRole('button', { name: 'Join friends' }).click();
+        await newcomer.getByRole('button', { name: 'Join room', exact: true }).click();
         await expect(
           newcomer.getByRole('heading', { name: 'You’re in for the next one.' }),
         ).toBeVisible();
@@ -170,9 +204,12 @@ test(`${playerCount} browsers play all five modes, refresh safely, and late arri
         const owner = current.game!.ownerId!;
         const reviewer = pages.find((_, i) => i !== 1 && ids[i] !== owner)!;
         if (mode === 'voice' && item === 0) {
-          const probe = await host.request.get(`/api/media/${current.game!.assetId}`, {
-            headers: { Range: 'bytes=0-1' },
-          });
+          const probe = await host.request.get(
+            `/api/rooms/${roomCode}/media/${current.game!.assetId}`,
+            {
+              headers: { Range: 'bytes=0-1' },
+            },
+          );
           expect(probe.status()).toBe(206);
           expect((await probe.body()).length).toBe(2);
         }
@@ -212,7 +249,9 @@ test(`${playerCount} browsers play all five modes, refresh safely, and late arri
           expect(views.filter((v) => v.game?.isImpostor)).toHaveLength(1);
           const impostor = ids[views.findIndex((v) => v.game?.isImpostor)];
           const privateMedia = await Promise.all(
-            pages.map((page) => page.request.get(`/api/media/${views[0].game!.assetId}`)),
+            pages.map((page) =>
+              page.request.get(`/api/rooms/${roomCode}/media/${views[0].game!.assetId}`),
+            ),
           );
           privateMedia.forEach((response) => expect(response.ok()).toBeTruthy());
           const bodies = await Promise.all(privateMedia.map((r) => r.body()));
@@ -287,6 +326,10 @@ test(`${playerCount} browsers play all five modes, refresh safely, and late arri
             .toBe(true);
         }
       }
+      const otherAfter = await state(otherHost);
+      expect(otherAfter.game).toEqual(otherBefore.game);
+      expect(otherAfter.players).toEqual(otherBefore.players);
+      expect(otherAfter.version).toBe(otherBefore.version);
       await late?.close();
     }
     expect(errors).toEqual([]);

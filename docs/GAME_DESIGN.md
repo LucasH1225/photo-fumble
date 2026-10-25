@@ -3,14 +3,19 @@
 Decisions confirmed during the design conversation on 24 October 2026. This is the
 concise decision record; the [PRD](PRD.md) adds functional requirements, examples, and
 clearly marked proposals. All five modes are needed for the same-day hackathon demo.
+Updated 25 October 2026 to add round countdowns, return to lobby, and host selection/transfer.
 
 - All five modes must be playable: Memory Quiz, Voice Detective, Chat Archaeology,
   Memory Bluff, and Memory Impostor.
-- Everyone opening the demo joins one shared game session. There are no room codes
-  or multiple simultaneous rooms in the demo.
+- Groups create a reusable room or join with its six-digit code and nickname.
+  Different rooms have separate players, uploads, hosts, games, and rankings.
+- At least three connected players in that room are required to start a new game.
+- Room codes remain reusable. Leaving a room does not delete membership or reset play.
+- Existing players can resume the previous shared game at `/legacy`; new players use rooms.
+- Encryption is deferred; storage remains private but accessible to its administrator.
 - Players identify themselves with nicknames and may join from different locations.
-- The first host is chosen randomly. That player remains host for the shared session; hosting
-  does not rotate.
+- Players can choose the first host directly or at random. The host can pass control
+  to another connected player; if the host goes offline, an active player can select a replacement.
 - The host controls the game's progress and chooses which mode to play next.
 - New arrivals wait for the next mode/game instead of joining the current game midway.
 
@@ -20,7 +25,8 @@ clearly marked proposals. All five modes are needed for the same-day hackathon d
 2. Players upload and prepare the material needed for that game. Memory Impostor can
    use uploaded photos too; a shared library is another possible source, not a requirement.
 3. Everyone plays the selected mode. When it ends, its final ranking appears automatically.
-4. The host chooses what to play next, including repeating the same mode if desired.
+4. The host returns everyone to the lobby or chooses what to play next, including
+   repeating the same mode if desired. Players and uploads are retained.
 
 Prepare fresh material when starting another play. Do not require everyone to upload
 material for all five modes before the game starts. There is no fixed sequence of modes.
@@ -115,9 +121,14 @@ each time, not multiple recordings.
   the random host election. With three players, Voice/Chat has one eligible judge
   per explanation, and Impostor has one impostor and two regular players.
 - Full calendar dates and server receipt ordering in Quiz. First submissions are final;
-  no countdown. The host opens guessing after preview and can close missing responses.
-- Same-browser cookies restore identity after refresh. Host stays fixed; if lost,
-  use the stopped-server operator reset. New arrivals wait, existing participants recover.
+  the host opens guessing after preview and can close missing responses.
+- Server-controlled countdowns: 60 seconds for guesses (90 in Voice), 60 seconds for
+  Impostor discussion, and 30 seconds for each judging or suspect ballot. Deadlines
+  survive refresh/restart. Stages close automatically; missing guesses score zero
+  and uncast votes abstain. Preparation, Quiz preview, reveals, and results are untimed.
+- Same-browser cookies restore identity after refresh. Host transfers retain scores,
+  roles, uploads, and deadlines. Active games can only transfer to current participants;
+  waiting newcomers remain ineligible until the game ends.
 - Images: JPEG/PNG/WebP, 10 MB input; recordings: MP3/M4A/WAV, 20 MB and 60 seconds.
 - Production: one small paid Render server plus Supabase Free for files and database.
   Accounts and paid resources have not been provisioned by implementation.

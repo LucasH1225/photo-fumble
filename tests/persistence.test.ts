@@ -154,3 +154,67 @@ test('mid-game recovery retains scores, order, roles, media, and an already save
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('round deadlines survive recovery, reject late actions, and expire durably once under concurrent ticks', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'photo-fumble-timer-'));
+  let now = 100_000;
+  try {
+    const service = new GameService(new LocalRepository(root, 'test'), () => now);
+    await service.init();
+    const ids = await Promise.all(['A', 'B', 'C'].map((name) => service.join(name)));
+    ids.forEach((id) => service.online.add(id));
+    const envelope = (service: GameService, command: Command) => ({
+      id: randomUUID(),
+      version: service.state.version,
+      gameId: service.state.game?.id,
+      phaseKey: service.state.game ? phaseKey(service.state.game) : undefined,
+      command,
+    });
+    const host = ids[0];
+    await service.command(host, envelope(service, { type: 'setHost', targetId: host }));
+    await service.command(host, envelope(service, { type: 'choose', mode: 'quiz' }));
+    for (const id of ids)
+      await service.submission(
+        id,
+        randomUUID(),
+        {
+          id: `asset-${id}`,
+          ownerId: id,
+          gameId: service.state.game!.id,
+          key: `${id}.webp`,
+          mime: 'image/webp',
+        },
+        { answer: '2023-06-10' },
+      );
+    await service.command(host, envelope(service, { type: 'start' }));
+    await service.command(host, envelope(service, { type: 'open' }));
+    const others = ids.filter((id) => id !== service.state.game!.order[0]);
+    const saved = envelope(service, { type: 'guess', value: '2023-06-10' });
+    await service.command(others[0], saved);
+    const deadline = service.state.game!.deadlineAt!;
+    assert.equal(deadline, now + 60_000);
+    const recovered = new GameService(new LocalRepository(root, 'test'), () => now);
+    await recovered.init();
+    ids.forEach((id) => recovered.online.add(id));
+    assert.equal(recovered.state.game!.deadlineAt, deadline);
+    const version = recovered.state.version;
+    now = deadline - 1;
+    await recovered.expireRounds();
+    assert.equal(recovered.state.version, version);
+    const late = envelope(recovered, { type: 'guess', value: '2023-06-10' });
+    now = deadline;
+    await assert.rejects(() => recovered.command(others[1], late), /stage has ended/i);
+    await Promise.all([recovered.expireRounds(), recovered.expireRounds()]);
+    assert.equal(recovered.state.version, version + 1);
+    assert.equal(recovered.state.game!.results.length, 1);
+    assert.deepEqual(recovered.state.game!.results[0].awards, { [others[0]]: 3 });
+    await recovered.command(others[0], saved);
+    assert.equal(recovered.state.game!.scores[others[0]], 3);
+    const restarted = new GameService(new LocalRepository(root, 'test'), () => now);
+    await restarted.init();
+    assert.deepEqual(restarted.state, recovered.state);
+    assert.equal(restarted.state.game!.deadlineAt, undefined);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

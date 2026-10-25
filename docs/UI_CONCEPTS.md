@@ -1,5 +1,8 @@
 # Photo Fumble — UI concepts for review
 
+> Historical design/research snapshot. The 25 October room-code update supersedes
+> earlier single-lobby restrictions. Current behavior is defined in [PRD.md](PRD.md).
+
 Prepared 24 October 2026. **Design proposal, not an implemented game.** No hosting,
 deployment, infrastructure, or product defaults are selected by this document.
 

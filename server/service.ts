@@ -3,6 +3,7 @@ import type { Envelope, Receipt, Session, Asset } from '../shared/types.js';
 import {
   addPlayer,
   applyCommand,
+  expireRound,
   phaseKey,
   requireRule,
   saveSubmission,
@@ -16,7 +17,10 @@ export class GameService {
   private queue: Promise<unknown> = Promise.resolve();
   private needsReload = false;
   changed: () => void = () => {};
-  constructor(public repository: Repository) {}
+  constructor(
+    public repository: Repository,
+    private now: () => number = Date.now,
+  ) {}
   async init() {
     this.state = await this.repository.load();
   }
@@ -35,6 +39,42 @@ export class GameService {
     this.queue = next.catch(() => {});
     return next;
   }
+  private async commitDraft(draft: Session, playerId: string, actionId: string): Promise<Receipt> {
+    draft.version++;
+    const receipt = { ok: true, version: draft.version };
+    try {
+      await this.repository.commit(this.state.version, draft, {
+        id: actionId,
+        playerId,
+        receipt,
+      });
+    } catch (error) {
+      this.needsReload = true;
+      await this.recoverIfNeeded().catch(() => {});
+      throw error;
+    }
+    this.state = draft;
+    this.changed();
+    return receipt;
+  }
+  private async expireInQueue() {
+    const g = this.state.game;
+    const now = this.now();
+    if (
+      !g ||
+      ['prepare', 'preview', 'reveal', 'results'].includes(g.phase) ||
+      (g.deadlineAt !== undefined && now < g.deadlineAt)
+    )
+      return;
+    const draft = structuredClone(this.state);
+    if (expireRound(draft, now)) await this.commitDraft(draft, '__clock__', randomUUID());
+  }
+  async expireRounds() {
+    return this.serialize(async () => {
+      await this.recoverIfNeeded();
+      await this.expireInQueue();
+    });
+  }
   async mutate(
     playerId: string,
     actionId: string,
@@ -42,26 +82,12 @@ export class GameService {
   ): Promise<Receipt> {
     return this.serialize(async () => {
       await this.recoverIfNeeded();
+      await this.expireInQueue();
       const prior = await this.repository.receipt(actionId, playerId);
       if (prior) return prior;
       const draft = structuredClone(this.state);
       change(draft);
-      draft.version++;
-      const receipt = { ok: true, version: draft.version };
-      try {
-        await this.repository.commit(this.state.version, draft, {
-          id: actionId,
-          playerId,
-          receipt,
-        });
-      } catch (error) {
-        this.needsReload = true;
-        await this.recoverIfNeeded().catch(() => {});
-        throw error;
-      }
-      this.state = draft;
-      this.changed();
-      return receipt;
+      return this.commitDraft(draft, playerId, actionId);
     });
   }
   async join(name: string, id: string = randomUUID()) {
@@ -76,14 +102,12 @@ export class GameService {
         Number.isInteger(envelope.version) && envelope.version <= draft.version,
         'Refresh the game and retry.',
       );
-      if (envelope.command.type !== 'elect') {
-        requireRule(envelope.gameId === draft.game?.id, 'The game has changed.');
-        requireRule(
-          envelope.phaseKey === (draft.game ? phaseKey(draft.game) : undefined),
-          'That stage has ended.',
-        );
-      }
-      applyCommand(draft, playerId, envelope.command, this.online);
+      requireRule(envelope.gameId === draft.game?.id, 'The game has changed.');
+      requireRule(
+        envelope.phaseKey === (draft.game ? phaseKey(draft.game) : undefined),
+        'That stage has ended.',
+      );
+      applyCommand(draft, playerId, envelope.command, this.online, this.now());
     });
   }
   async submission(

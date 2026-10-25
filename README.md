@@ -1,8 +1,15 @@
 # Photo Fumble
 
 A five-mode browser party game built around friends' photos, recordings, and chat
-memories. All five modes are implemented with a shared lobby, a random fixed host,
-private uploads, per-game scoring, and automatic final rankings.
+memories. All five modes are implemented with reusable room codes, selectable hosts,
+private uploads, round countdowns, per-game scoring, and automatic final rankings.
+
+Choose a host directly or pick one at random. The host can pass control from
+**View players**; if they disconnect, an active player can choose a replacement.
+Guessing lasts 60 seconds (90 for Voice Detective), discussion lasts 60 seconds,
+and each ballot lasts 30 seconds. Expired stages advance automatically; refreshes
+keep the same deadline. After the final ranking, the host can use **Back to lobby**
+to return everyone to mode selection.
 
 ## Run locally
 
@@ -13,8 +20,13 @@ npm ci
 npm run dev
 ```
 
-Open **http://localhost:5173**. Use at least three separate browser profiles/private contexts
-to test multiplayer on one computer. Tabs in one profile share a player identity.
+Open **http://localhost:5173**, choose **Create a room**, and share the six-digit code
+or invite link. Friends choose **Join a room** and enter that code and a nickname.
+Each room needs at least three connected players to start a game. Use separate
+browser profiles/private contexts to test distinct players on one computer. Tabs
+in one profile share an identity, but can play in different rooms independently.
+Rooms are reusable; leaving or refreshing does not reset a game. Existing members
+of the old shared game can use **Resume previous game** to open `/legacy`.
 Local game state and files persist in the ignored `.data/` directory.
 
 ## Verify
@@ -30,7 +42,7 @@ npm run build
 For a built local server, set `APP_ORIGIN=http://localhost:3001` and run `npm start`.
 The development origin defaults to port 5173. Browser tests use isolated temporary
 data and independent browser contexts for both three- and four-player games,
-including a phone viewport. Set `E2E_PORT` to change the default test port 4173.
+including a phone viewport and two simultaneous isolated rooms.
 
 Check the public deployment with anonymous, read-only requests:
 

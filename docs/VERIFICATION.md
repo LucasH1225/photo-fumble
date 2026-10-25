@@ -6,7 +6,9 @@ Node 24 LTS via `.node-version`.
 ## Passed
 
 - `npm run typecheck`: frontend, shared contracts, backend, scripts, and unit tests.
-- `npm test`: 29 tests covering the two-/three-player start boundary, single-judge
+- `npm test`: 46 tests covering round deadlines, timeout scoring, late-action rejection,
+  concurrent clock ticks, persisted deadlines, explicit host choice/transfer,
+  offline-host recovery, return to lobby, the two-/three-player start boundary, single-judge
   Voice/Chat acceptance and rejection, three-player impostor catches and ties,
   ranking, scoring, judging ties, author/uploader
   exclusion, private media permissions, late arrivals, host controls, result resets,
@@ -24,6 +26,40 @@ Node 24 LTS via `.node-version`.
 Result screenshots are generated at `output/playwright/final-ranking-3.png` and
 `output/playwright/final-ranking.png`. Set `E2E_PORT` to use a different local port
 when another preview or test server occupies the default 4173.
+
+Focused browser checks for the 25 October gameplay fixes also passed on an isolated
+local server with three independent browser identities:
+
+- Selected a specific initial host, transferred control, disconnected that host,
+  and used the offline-host selector to keep the same game and deadline.
+- Watched a real 60-second guessing countdown expire through the server clock;
+  the submitted correct guess scored once and the missing guess scored zero.
+- Refreshed during guessing and retained the original deadline and locked guess.
+- Returned connected players from the final ranking to the lobby, rejoined the
+  disconnected player, and started another game with fresh scores.
+- Reviewed countdown and host controls at desktop and 390px phone widths; no
+  horizontal overflow. Captures are saved as `output/playwright/fixes-*.png`.
+
+These gameplay changes are retained in the room-code release; deployment evidence is recorded below.
+
+## Reusable rooms — 25 October 2026
+
+- 46 unit/integration tests pass, including insert-only code reservation and collisions,
+  leading-zero codes, unknown-room rejection without creating storage, cache eviction,
+  storage-error recovery, independent action receipts, and separate room clocks.
+- The HTTP/Socket.IO integration test verifies membership and media isolation, forged
+  cross-room game identifiers, per-room presence, duplicate tabs, the same browser
+  identity in multiple rooms, room/file restoration after a real server restart,
+  and preservation of the old namespace and its exact media key.
+- Each three-/four-player full walkthrough keeps a second three-player room in a
+  different game's preparation phase and verifies its state is unchanged after
+  every completed mode. The separate room UI test covers copyable invites,
+  leave/rejoin, keyboard submission, mobile width, and same-browser tabs.
+- Screenshots: `output/playwright/rooms-join-phone.png`,
+  `output/playwright/rooms-lobby-phone.png`, and `output/playwright/rooms-lobby-desktop.png`.
+- No database migration, storage migration, encryption change, or media deletion.
+  Hosted room checks are recorded after publication; physical iPhone/Safari testing
+  remains a separate rehearsal.
 
 ## Public deployment checks — 25 October 2026
 
@@ -53,7 +89,7 @@ create players, upload files, reset sessions, or interrupt the shared game.
 
 Use the rehearsal in [DEPLOYMENT.md](DEPLOYMENT.md) with at least three actual devices:
 
-- Join the same public URL, choose the host, and complete all five modes; confirm
+- Create a room and join the same six-digit code, choose the host, and complete all five modes; confirm
   synchronized actions, correct per-mode scores, and final rankings on every device.
 - Upload one photo, recording, and masked screenshot; confirm playback, private
   media handling, and the impostor's blurred image on the hosted service.
@@ -65,9 +101,9 @@ Use the rehearsal in [DEPLOYMENT.md](DEPLOYMENT.md) with at least three actual d
 
 The existing full browser walkthrough uses a temporary local server and local file
 persistence. Redirecting it unchanged to the shared public game would retain its
-test players and uploaded files, and could strand the fixed host when its
-temporary browser contexts close. Full hosted automation needs a separate test
-instance with its own `SESSION_NAMESPACE` and retained test host access.
+test players and uploaded files after its temporary browser contexts close.
+Full hosted automation must use dedicated test rooms and synthetic media, never
+existing participants’ games. A separate instance/namespace remains preferable for load tests.
 
 The automated phone check uses Chromium at a phone viewport. No physical Safari,
 physical-device audio, cross-network multiplayer, or hosted restart-recovery test

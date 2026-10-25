@@ -3,7 +3,7 @@
 **Status:** working PRD for the hackathon demo.  
 **Prepared:** 24 October 2026.  
 **Delivery goal:** all five modes playable for the same-day demo.  
-**Implementation status:** all five modes implemented; local persistence and a Supabase production adapter are included. Cloud deployment requires owner account setup.
+**Implementation status:** all five modes implemented; local persistence and a Supabase production adapter are included. The public deployment uses Render and private Supabase storage.
 
 This PRD consolidates the original idea and the user's subsequent decisions. Later
 decisions take precedence over the attached concept. **Confirmed** requirements are
@@ -17,8 +17,9 @@ Photo Fumble is a browser party game for friends to guess, explain, bluff, and d
 memories using their own photos, recordings, and chat screenshots. Friends may play
 together in person or join from different locations.
 
-The demo has one shared session. Players enter a nickname, prepare one item for the
-chosen mode, and play. A fixed host chooses the next mode and controls progress.
+Groups create reusable rooms or join with a six-digit code and nickname. Each room
+has its own session, players, uploads, and game state, with at least three connected
+players needed to start a game. Players prepare one item for the chosen mode and play. A chosen host selects the next mode and controls progress.
 Each mode is its own scored game and ends by automatically showing its final ranking.
 
 ## 2. Demo goals and boundaries
@@ -35,8 +36,11 @@ Each mode is its own scored game and ends by automatically showing its final ran
 
 ### Confirmed boundaries
 
-- One shared session; no room codes or multiple simultaneous rooms for this demo.
-- One randomly selected host who stays host; no automatic host rotation.
+- Separate reusable rooms with six-digit codes; groups can play simultaneously.
+- Room codes do not expire or get reassigned. No accounts or cross-device identity recovery.
+- Encryption is deferred: private storage is access-controlled and remains operator-accessible.
+- One directly or randomly selected host, with host-controlled transfer and manual
+  replacement by an active player when the host disconnects.
 - Scores belong to the current game. No combined leaderboard across the five modes.
 - No requirement to prepare a collection of material for all modes upfront.
 - A shared photo library is an optional side feature, deferred from the required demo.
@@ -51,7 +55,8 @@ current brief. An in-person conversation or an existing group call can carry dis
 
 ## 3. Roles and terminology
 
-- **Session:** the gathering of players who can play successive independent games.
+- **Room:** a reusable group space entered using its six-digit code or invite link.
+- **Session:** the gathering of players within one room who can play successive independent games.
 - **Mode:** one of the five types of game available to the host.
 - **Game:** one self-contained play of a mode with fresh scores and its own result.
 - **Round:** a single guessing or voting cycle, such as one submitted photo. Avoid
@@ -67,8 +72,8 @@ The [glossary](../GLOSSARY.md) is the canonical vocabulary reference.
 
 | ID | Confirmed requirement |
 | --- | --- |
-| SH-01 | Players join the same shared session using nicknames. |
-| SH-02 | Select the first host randomly and keep that host across mode changes. |
+| SH-01 | Players create or join a coded room using nicknames; rooms isolate all players, media, and game state. |
+| SH-02 | Choose the first host directly or randomly. The host can transfer control; active players can replace an offline host. |
 | SH-03 | The host chooses a mode; all participating players follow that choice. |
 | SH-04 | Prepare material when entering the selected game, not for all five modes upfront. |
 | SH-05 | Each player contributes one relevant item each time: one photo, recording, or chat screenshot. |
@@ -76,8 +81,9 @@ The [glossary](../GLOSSARY.md) is the canonical vocabulary reference.
 | SH-07 | Fresh scores start with each game; accumulate points only within that game. |
 | SH-08 | Finishing a game automatically displays its final ranking. The host cannot skip the ranking. |
 | SH-09 | The highest score wins; players tied for the highest score share the win. |
-| SH-10 | After results, the host can select another mode or repeat a mode with fresh scores. |
+| SH-10 | After results, the host can return everyone to the lobby, select another mode, or repeat a mode with fresh scores. |
 | SH-11 | Keep uploaded files in storage after results for now. |
+| SH-12 | Show synchronized countdowns during guesses, discussion, and ballots; the server advances expired stages and preserves deadlines through refresh/recovery. |
 
 Required game integrity: a player must only receive the answers, roles, and image
 version they are meant to know at that stage. Host controls do not require privileged
@@ -108,7 +114,8 @@ beats a faster inaccurate date.
 **Preparation:** uploader enters the correct full calendar date privately.
 
 **Demo defaults:** whole calendar dates; absolute UTC day distance, then server receipt
-order. First valid guess is final. No timer; host opens/closes guessing. Date questions
+order. First valid guess is final. The host opens guessing after preview; a 60-second
+countdown closes it automatically, or the host can close it early. Date questions
 only in this version.
 
 ### 5.2 Voice Detective
@@ -230,21 +237,22 @@ interview gaps and are implemented by the server.
 | --- | --- |
 | Nicknames and identity | Guest browser identity with a nickname; no account-registration screen for the demo. |
 | Minimum players | Three connected participants in all five modes. |
-| Starting the session | Any joined player can request random host selection once three are connected; election happens once. |
+| Starting the session | Any joined player can choose a connected host directly, or request random selection once three are connected. Starting a game requires three connected players. |
 | Finishing a game | Use each participant's one item once in all five modes; automatic final rankings. |
 | Subjective answer input | Short typed explanations; discussion can happen in person or on a separate call. |
 | Voice/Chat points | One point for each accepted explanation; zero for a rejected explanation. |
 | Self-judging | Exclude both uploader and explanation author; with three players, one eligible judge decides each explanation. |
-| Judging completion | Collect eligible votes; a host-controlled close can treat uncast votes as abstentions. Require more yes than no, and reject an explanation with no votes. |
+| Judging completion | Each explanation has a fresh 30-second ballot. Timeout or host-controlled close treats uncast votes as abstentions. Require more yes than no, and reject an explanation with no votes. |
 | Impostor selection | Shuffle all photos and participants independently; each is impostor once; uploader remains eligible. |
 | Impostor outcome and points | Unique top suspect catches actual impostor: regulars +1 each; otherwise impostor +2, including ties/no votes. |
-| Quiz timing | Whole dates, UTC day distance then server receipt order; first guess final, no timer. |
-| Refresh and host departure | Recover cookie identity; no automatic host transfer. Operator can reset while stopped, retaining media. |
+| Round timing | 60-second guesses (90 seconds in Voice), 60-second Impostor discussion, and 30-second ballots. The server advances expired stages; missing guesses get zero. Preparation, Quiz preview, reveals, and results are untimed. |
+| Quiz timing | Whole dates, UTC day distance then server receipt order; first guess final, 60-second guessing countdown. |
+| Refresh and host departure | Recover cookie identity and the original deadline. The host can pass control, or active players can manually replace an offline host. Waiting newcomers cannot host an active game. |
 | Upload limits | JPEG/PNG/WebP inputs up to 10 MB; MP3/M4A/WAV up to 20 MB and 60 seconds. |
 
 ## 8. Demo acceptance criteria
 
-- Three or four separate browser identities can complete all five modes in one shared session.
+- Three and four separate browser identities can complete all five modes in one room while another group plays independently.
 - All five modes have playable submission, interaction, scoring, and results paths
   using the adopted scoring defaults above.
 - A non-host cannot select the mode or trigger the host's skip-to-vote action.

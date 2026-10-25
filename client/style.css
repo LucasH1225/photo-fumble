@@ -23,6 +23,7 @@ body {
 }
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -37,6 +38,7 @@ button:disabled {
 button,
 a,
 input,
+select,
 textarea,
 summary {
   touch-action: manipulation;
@@ -44,6 +46,7 @@ summary {
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
+select:focus-visible,
 textarea:focus-visible,
 summary:focus-visible {
   outline: 3px solid var(--focus);
@@ -93,6 +96,7 @@ small {
   font-size: 13px;
 }
 input,
+select,
 textarea {
   display: block;
   width: 100%;
@@ -670,7 +674,7 @@ cite {
   font-size: 14px;
   --focus: #76518f;
 }
-.notice button {
+.notice button:not(.button) {
   background: none;
   border: 0;
   text-decoration: underline;
@@ -842,6 +846,51 @@ progress::-moz-progress-bar {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+}
+.host-controls {
+  margin: 20px 0;
+}
+.host-select-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.host-select-row select {
+  flex: 1 1 180px;
+  width: auto;
+  max-width: 360px;
+}
+.host-controls .support {
+  margin-top: 10px;
+}
+.notice .host-controls {
+  --muted: #665044;
+  --line: #ad8878;
+}
+.round-countdown {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 18px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+.round-countdown .support {
+  margin-top: 4px;
+}
+.round-countdown [role='timer'] {
+  flex: none;
+  font-size: 30px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.round-countdown.urgent [role='timer'] {
+  color: #943b32;
+}
+.results-navigation {
+  margin: 24px 0;
 }
 .play-grid {
   display: grid;
@@ -1326,6 +1375,15 @@ progress::-moz-progress-bar {
   }
 }
 @media (max-width: 639px) {
+  .host-select-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .host-select-row select {
+    flex: auto;
+    width: 100%;
+    max-width: none;
+  }
   .topbar {
     min-height: 76px;
     padding: 16px 20px;
@@ -1590,4 +1648,47 @@ progress::-moz-progress-bar {
     transition: none !important;
     scroll-behavior: auto !important;
   }
+}
+/* Room controls keep the existing game layout and palette. */
+.room-entry-actions,
+.room-toolbar,
+.room-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.room-entry-actions {
+  margin: 1.25rem 0;
+}
+.room-entry-actions .button {
+  flex: 1;
+  min-width: 8rem;
+}
+.room-entry-actions [aria-pressed='true'] {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.room-toolbar {
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line, #8c7892);
+}
+.room-toolbar strong {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.12em;
+}
+.room-toolbar .button {
+  padding: 0.55rem 0.8rem;
+  min-height: 44px;
+}
+.room-toolbar p {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+.legacy-resume {
+  text-align: center;
+  padding: 0 1rem 2rem;
 }
