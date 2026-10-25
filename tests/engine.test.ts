@@ -113,7 +113,7 @@ test('back to lobby is available to the host after results and retains players a
   assert.ok(Object.values(s.game!.scores).every((score) => score === 0));
 });
 
-for (const mode of MODES) {
+for (const mode of MODES.filter((mode) => mode !== 'impostor')) {
   test(`${mode}: deadlines advance active stages once and reset for each item`, () => {
     const { s, online } = fixture(mode);
     const g = s.game!;
@@ -131,18 +131,13 @@ for (const mode of MODES) {
     assert.equal(viewFor(s, 'p0', online).game?.deadlineAt, deadline);
     assert.equal(expireRound(s, deadline - 1), false);
     assert.equal(expireRound(s, deadline), true);
-    if (mode === 'impostor') {
-      assert.equal(g.phase, 'vote');
-      assert.equal(g.deadlineAt, deadline + 30_000);
-      assert.equal(expireRound(s, g.deadlineAt), true);
-    }
     assert.equal(g.phase, 'reveal');
     assert.equal(g.deadlineAt, undefined);
     assert.equal(g.results.length, 1);
     assert.equal(expireRound(s, deadline + 1_000_000), false);
     assert.equal(g.results.length, 1);
     applyCommand(s, 'p0', { type: 'next' }, online, deadline + 2_000_000);
-    assert.equal(g.phase, mode === 'quiz' ? 'preview' : mode === 'impostor' ? 'discuss' : 'guess');
+    assert.equal(g.phase, mode === 'quiz' ? 'preview' : 'guess');
     assert.equal(
       g.deadlineAt,
       mode === 'quiz' ? undefined : deadline + 2_000_000 + (mode === 'voice' ? 90_000 : 60_000),
@@ -237,7 +232,7 @@ test('bluff gives two per fooled person and one per correct guess', () => {
   assert.equal(s.game!.scores[owner], 4);
   assert.equal(s.game!.scores[others[0]], 1);
 });
-for (const mode of ['voice', 'chat'] as const) {
+for (const mode of ['voice'] as const) {
   test(`${mode}: with three players, one eligible judge accepts or rejects each explanation`, () => {
     const { s, act, owner, others, online } = fixture(mode, 3);
     for (const id of others) act(id, { type: 'guess', value: `Explanation from ${id}` });
@@ -297,29 +292,45 @@ test('no guesses and no votes can be closed without deadlocking or awarding poin
   act('p0', { type: 'close' });
   assert.equal(s.game!.phase, 'reveal');
 });
-test('impostor sees only blurred media, others see clear, and assignments are balanced', () => {
-  const { s, ids, owner } = fixture('impostor');
-  const g = s.game!;
-  const impostor = g.impostors[owner];
-  assert.equal(new Set(Object.values(g.impostors)).size, ids.length);
-  assert.equal(mediaKeyFor(s, impostor, `asset-${owner}`).key, `${owner}-blur.webp`);
-  const other = ids.find((id) => id !== impostor)!;
-  assert.equal(mediaKeyFor(s, other, `asset-${owner}`).key, `${owner}.webp`);
-  assert.equal(viewFor(s, other, new Set()).game?.isImpostor, false);
-  assert.equal(JSON.stringify(viewFor(s, other, new Set())).includes('blurKey'), false);
-  assert.throws(() => mediaKeyFor(s, impostor, `asset-${ids.find((id) => id !== owner)}`));
+test('impostor assignments are balanced, never include the uploader, and keep their photo clear', () => {
+  for (const count of [3, 4, 6])
+    for (let sample = 0; sample < 30; sample++) {
+      const { s, ids, owner } = fixture('impostor', count);
+      const g = s.game!;
+      const impostor = g.impostors[owner];
+      assert.equal(new Set(Object.values(g.impostors)).size, ids.length);
+      for (const id of ids) assert.notEqual(g.impostors[id], id);
+      assert.notEqual(impostor, owner);
+      assert.equal(mediaKeyFor(s, owner, `asset-${owner}`).key, `${owner}.webp`);
+      assert.equal(viewFor(s, owner, new Set()).game?.blurred, false);
+      assert.equal(mediaKeyFor(s, impostor, `asset-${owner}`).key, `${owner}-blur.webp`);
+      const other = ids.find((id) => id !== impostor)!;
+      assert.equal(mediaKeyFor(s, other, `asset-${owner}`).key, `${owner}.webp`);
+      assert.equal(viewFor(s, other, new Set()).game?.isImpostor, false);
+      assert.equal(JSON.stringify(viewFor(s, other, new Set())).includes('blurKey'), false);
+      assert.throws(() => mediaKeyFor(s, impostor, `asset-${ids.find((id) => id !== owner)}`));
+    }
 });
 for (const count of [3, 4]) {
-  test(`${count} players: uploader can be impostor; correct suspect awards only regulars`, () => {
+  test(`${count} players: catching a non-uploader impostor awards only regulars and advances without revealing`, () => {
     const { s, act, ids, owner } = fixture('impostor', count);
-    s.game!.impostors[owner] = owner;
+    const impostor = s.game!.impostors[owner];
     act('p0', { type: 'skip' });
-    assert.throws(() => act(owner, { type: 'vote', targetId: owner }));
-    for (const id of ids)
-      act(id, { type: 'vote', targetId: id === owner ? ids.find((p) => p !== owner)! : owner });
+    assert.throws(() => act(impostor, { type: 'vote', targetId: impostor }));
+    for (const id of ids) act(id, { type: 'vote', targetId: id === impostor ? owner : impostor });
     assert.equal(s.game!.results[0].escaped, false);
-    assert.equal(s.game!.scores[owner], 0);
-    ids.filter((id) => id !== owner).forEach((id) => assert.equal(s.game!.scores[id], 1));
+    assert.equal(s.game!.scores[impostor], 0);
+    ids.filter((id) => id !== impostor).forEach((id) => assert.equal(s.game!.scores[id], 1));
+    assert.equal(s.game!.index, 1);
+    assert.equal(s.game!.phase, 'discuss');
+    for (const id of ids) {
+      const view = viewFor(s, id, new Set(ids)).game!;
+      assert.deepEqual(view.scores, {});
+      assert.equal(view.result, undefined);
+      assert.equal(view.answer, undefined);
+      assert.equal(view.scoresHidden, true);
+      assert.throws(() => mediaKeyFor(s, id, `asset-${owner}`));
+    }
   });
   test(`${count} players: a suspect-vote tie awards two points to the impostor`, () => {
     const { s, act, ids, owner } = fixture('impostor', count);
@@ -330,6 +341,120 @@ for (const count of [3, 4]) {
     assert.equal(s.game!.scores[s.game!.impostors[owner]], 2);
   });
 }
+
+test('impostor gives every player a separate 20-second turn, then a 30-second ballot', () => {
+  const { s, ids, online } = fixture('impostor', 3);
+  const g = s.game!;
+  let now = 1_000;
+  delete g.deadlineAt;
+  expireRound(s, now);
+  assert.deepEqual([...g.speakerOrder!].sort(), [...ids].sort());
+  for (let turn = 0; turn < ids.length; turn++) {
+    const speaker = g.speakerOrder![turn];
+    const key = phaseKey(g);
+    const deadline = now + 20_000;
+    assert.equal(g.deadlineAt, deadline);
+    assert.equal(viewFor(s, speaker, online).game!.speakerTurn, turn + 1);
+    assert.equal(viewFor(s, speaker, online).game!.canClue, true);
+    const other = ids.find((id) => id !== speaker)!;
+    assert.equal(viewFor(s, other, online).game!.canClue, false);
+    assert.throws(() => applyCommand(s, other, { type: 'clue', value: 'Too early' }, online, now));
+    applyCommand(s, speaker, { type: 'clue', value: 'A colourful shape' }, online, now);
+    assert.equal(phaseKey(g), key); // Optional text does not shorten the speaking turn.
+    online.delete(speaker); // A disconnected speaker cannot hold up the next turn.
+    assert.equal(expireRound(s, deadline - 1), false);
+    assert.equal(expireRound(s, deadline), true);
+    assert.notEqual(phaseKey(g), key);
+    assert.equal(expireRound(s, deadline), false);
+    now = deadline;
+  }
+  assert.equal(g.phase, 'vote');
+  assert.equal(g.deadlineAt, now + 30_000);
+  expireRound(s, g.deadlineAt);
+  assert.equal(g.phase, 'discuss');
+  assert.equal(g.index, 1);
+  assert.equal(g.speakerIndex, 0);
+  assert.equal(g.deadlineAt, now + 50_000);
+  assert.equal(g.results.length, 1);
+});
+
+test('impostor shows only the final ranking, including after skipped photos', () => {
+  const { s, act, ids, online } = fixture('impostor', 3);
+  for (let item = 0; item < ids.length; item++) act('p0', { type: 'skipItem' });
+  assert.equal(s.game!.phase, 'results');
+  for (const id of ids) {
+    const view = viewFor(s, id, online).game!;
+    assert.equal(view.hideRoundResults, true);
+    assert.equal(view.scoresHidden, false);
+    assert.equal(view.rankings!.length, ids.length);
+    assert.equal(view.result, undefined);
+    assert.equal(view.answer, undefined);
+    assert.equal(view.assetId, undefined);
+    assert.equal(view.ownerId, undefined);
+    assert.equal(view.isImpostor, undefined);
+    for (const owner of ids) assert.throws(() => mediaKeyFor(s, id, `asset-${owner}`));
+  }
+});
+
+test('chat uploader can judge, explanation author cannot; a three-player tie rejects', () => {
+  const { s, act, owner, others, online } = fixture('chat', 3);
+  for (const id of others) act(id, { type: 'guess', value: `Explanation from ${id}` });
+  const authors = [...s.game!.judgeAuthors];
+  for (let i = 0; i < authors.length; i++) {
+    const author = authors[i];
+    const judge = others.find((id) => id !== author)!;
+    assert.equal(viewFor(s, owner, online).game!.canJudge, true);
+    assert.equal(viewFor(s, owner, online).game!.eligible, 2);
+    assert.equal(viewFor(s, author, online).game!.canJudge, false);
+    assert.throws(() => act(author, { type: 'judge', yes: true }));
+    act(owner, { type: 'judge', yes: true });
+    assert.throws(() => act(owner, { type: 'judge', yes: false }));
+    act(judge, { type: 'judge', yes: i === 0 });
+  }
+  assert.deepEqual(s.game!.results[0].judgements, [
+    { authorId: authors[0], yes: 2, no: 0, accepted: true },
+    { authorId: authors[1], yes: 1, no: 1, accepted: false },
+  ]);
+  assert.equal(s.game!.scores[authors[0]], 1);
+  assert.equal(s.game!.scores[authors[1]], 0);
+});
+
+test('chat with four players: majority accepts, tied submitted votes reject on host close', () => {
+  const { s, act, owner, others } = fixture('chat');
+  for (const id of others.slice(0, 2)) act(id, { type: 'guess', value: 'A story' });
+  act('p0', { type: 'close' });
+  const author = s.game!.judgeAuthors[0];
+  const otherJudge = others.find((id) => id !== author)!;
+  act(owner, { type: 'judge', yes: true });
+  act(otherJudge, { type: 'judge', yes: false });
+  act('p0', { type: 'close' });
+  const nextAuthor = s.game!.judgeAuthors[1];
+  const judges = s.game!.roster.filter((id) => id !== nextAuthor);
+  judges.forEach((id, i) => act(id, { type: 'judge', yes: i !== 2 }));
+  assert.equal(s.game!.results[0].judgements![0].accepted, false);
+  assert.equal(s.game!.results[0].judgements![1].accepted, true);
+});
+
+test('already-started saved games preserve their prior discussion, reveals and chat voting rules', () => {
+  const { s, act, online } = fixture('impostor', 3);
+  delete s.game!.rulesVersion;
+  delete s.game!.speakerOrder;
+  delete s.game!.speakerIndex;
+  delete s.game!.deadlineAt;
+  expireRound(s, 1_000);
+  assert.equal(s.game!.deadlineAt, 61_000);
+  expireRound(s, 61_000);
+  assert.equal(s.game!.phase, 'vote');
+  act('p0', { type: 'close' });
+  assert.equal(s.game!.phase, 'reveal');
+  assert.ok(viewFor(s, 'p0', online).game!.result);
+  assert.equal(phaseKey(s.game!).split(':').length, 4);
+  const chat = fixture('chat', 3);
+  delete chat.s.game!.rulesVersion;
+  for (const id of chat.others) chat.act(id, { type: 'guess', value: 'A story' });
+  assert.equal(viewFor(chat.s, chat.owner, chat.online).game!.canJudge, false);
+  assert.throws(() => chat.act(chat.owner, { type: 'judge', yes: true }));
+});
 test('new players wait, cannot access media, and cannot act in an active game', () => {
   const { s, act, owner } = fixture('bluff');
   addPlayer(s, 'Late friend', 'late');

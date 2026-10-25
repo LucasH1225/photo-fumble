@@ -130,16 +130,18 @@ reveal path with true/false story choices and 2-per-fooled / 1-per-correct scori
 ### D. Share context judging
 
 Voice Detective adds recording playback. Chat Archaeology adds the identity-hidden
-screenshot. Both reuse explanation collection and majority judging, with the uploader
-and explanation author excluded, tied judging votes rejecting that explanation,
-and one point for each accepted explanation.
+screenshot. Both reuse explanation collection and majority judging, with the
+explanation author excluded and one point for each accepted explanation. Voice also
+excludes the uploader; Chat allows the uploader to judge. Tied votes reject.
 
 ### E. Add private-role play
 
 Memory Impostor needs a real blurred derivative, private role delivery, clear-photo
-views for others, discussion, the host's skip-to-vote control, suspect voting, and a
-chosen scoring/outcome rule. Do not count the mode as complete until that rule is
-implemented and the mandatory final ranking follows it.
+views for others, separate 20-second speaking turns, the host’s skip-to-vote control,
+and suspect voting. A shuffled role cycle prevents uploaders from being impostor on
+their own photo while giving each participant one impostor assignment. Voting moves
+directly to the next photo; player payloads omit live scores and round results. Only
+final rankings are shown after the last photo.
 
 ### F. Integrate and rehearse
 
@@ -160,7 +162,8 @@ before spending the remaining time on optional library or decorative features.
   recording is additional scope beyond uploading a prepared recording.
 - Remove chat identities from the shared pixels themselves if masking is implemented;
   do not merely hide them with a reversible screen overlay.
-- Keep the original clear photo out of the impostor's client before reveal.
+- Keep the original clear photo out of the impostor’s client. New Impostor games do
+  not reveal original photos after voting or on the final ranking screen.
 - Keep uploads after the game as agreed. Do not add an unrequested automatic deletion job.
 
 ## 6. Hosting and short-term costs discussed
@@ -216,3 +219,11 @@ view, and every mode's transition to its own final ranking.
 - The old deployment namespace remains intact behind `/legacy` for existing members.
 - A single server retains the global three-upload cap. Horizontal scaling and
   end-to-end encryption are deferred.
+
+## Rule-update compatibility — 25 October 2026
+
+Newly selected games store rules version 2 in the existing session JSON; no SQL or
+media migration is required. Saved preparation adopts the new rules when starting.
+Already-started games without this version retain their saved roles, timing,
+judging eligibility, and reveals until they finish. Rooms, player identities,
+existing file keys, retention, and the other modes’ scoring stay unchanged.

@@ -6,10 +6,15 @@ private uploads, round countdowns, per-game scoring, and automatic final ranking
 
 Choose a host directly or pick one at random. The host can pass control from
 **View players**; if they disconnect, an active player can choose a replacement.
-Guessing lasts 60 seconds (90 for Voice Detective), discussion lasts 60 seconds,
-and each ballot lasts 30 seconds. Expired stages advance automatically; refreshes
+Guessing lasts 60 seconds (90 for Voice Detective). In Memory Impostor, every player
+gets a separate 20-second speaking turn; each ballot lasts 30 seconds. Expired stages advance automatically; refreshes
 keep the same deadline. After the final ranking, the host can use **Back to lobby**
 to return everyone to mode selection.
+
+In new Memory Impostor games, uploaders always see their clear photo and cannot be
+the impostor on it. Voting advances straight to the next photo, with scores and
+round outcomes hidden until the final ranking. Chat Archaeology uploaders can
+judge other players’ explanations; Voice Detective uploaders still sit out.
 
 ## Run locally
 

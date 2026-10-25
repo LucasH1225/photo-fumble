@@ -1692,3 +1692,21 @@ progress::-moz-progress-bar {
   text-align: center;
   padding: 0 1rem 2rem;
 }
+.speaking-order {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.speaking-order li {
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.85rem;
+}
+.speaking-order [aria-current='step'] {
+  background: var(--accent);
+  color: var(--ink);
+  border-color: var(--accent);
+}

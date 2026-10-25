@@ -87,6 +87,7 @@ export interface ItemResult {
   trueIndex?: number;
 }
 export interface Game {
+  rulesVersion?: 2;
   id: string;
   mode: Mode;
   phase: Phase;
@@ -106,6 +107,8 @@ export interface Game {
   sequence: number;
   loaded: string[];
   deadlineAt?: number;
+  speakerOrder?: string[];
+  speakerIndex?: number;
 }
 export interface Session {
   version: number;
@@ -155,6 +158,12 @@ export interface PlayerView {
     deadlineAt?: number;
     roster: string[];
     scores: Record<string, number>;
+    scoresHidden?: boolean;
+    hideRoundResults?: boolean;
+    speakerId?: string;
+    speakerOrder?: string[];
+    speakerTurn?: number;
+    canClue?: boolean;
     loaded: string[];
     ready: string[];
     ownSubmission?: { assetId: string; answer: string; falseStory?: string };

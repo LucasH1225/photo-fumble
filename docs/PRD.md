@@ -148,13 +148,14 @@ abstaining. More yes than no accepts; ties and empty ballots reject independentl
 1. Each player uploads one screenshot each time.
 2. The profiles/identities of the two speakers are hidden, as in the original concept.
 3. Other players explain what they think was happening.
-4. Use the same judging rule as Voice Detective: reveal context, uploader sits out,
-   majority accepts each explanation, and a tied vote rejects that explanation.
+4. Reveal context, then vote on each explanation. The screenshot uploader can vote;
+   the explanation author cannot. More yes than no accepts; a tie rejects.
 5. End with that game's final ranking and fresh scores for the next game.
 
 **Adopted defaults:** manual rectangle masks flattened into stored pixels, with
-uploader review/confirmation. One point for each accepted explanation. No self-judging
-or uploader judging. Automatic identity detection is deferred.
+uploader review/confirmation. One point for each accepted explanation. No self-judging.
+With three players, two eligible judges include the uploader; a 1–1 split rejects.
+Automatic identity detection is deferred.
 
 **Recommended demo approach:** let uploaders crop or cover names and avatars before
 sharing, and preview the exact screenshot others will see. The shared image must
@@ -191,14 +192,21 @@ that player tries to infer the photo and avoid detection.
    same photo**, rather than an unrelated photo.
 3. The blur preserves rough shapes, colours, and some features, while making the
    subject hard to identify. Validate the strength visually during implementation.
-4. Players can describe the photo in turn. One turn each is the suggested default.
+4. Every player, including the uploader, receives one 20-second speaking turn in a
+   shuffled order per photo. The server advances turns automatically. Optional typed
+   clues are accepted only during the player’s own turn; speech uses an external call
+   or happens in person.
 5. The **host controls a skip-to-vote button**. The group can discuss aloud and move
    directly to voting without completing a required on-screen speaking sequence.
 6. The discussion skip cannot bypass the mandatory final ranking.
+7. Voting automatically advances to the next photo without showing round results.
+   Hide live scores, impostor identities other than the player’s own role, caught/escaped
+   outcomes, and clear-photo reveals. The final screen shows only rankings, with no
+   round breakdown.
 
-**Adopted defaults:** every uploaded photo once, randomly ordered; independently shuffle
-participants for balanced roles (each is impostor once). The uploader may be impostor,
-as explicitly chosen. One suspect vote per player; no self-votes. A unique top suspect
+**Adopted defaults:** every uploaded photo once, randomly ordered; use a shuffled cycle
+to assign each participant as impostor once, never on their own photo. Uploaders always
+receive the clear image. One suspect vote per player; no self-votes. A unique top suspect
 who is the impostor is caught, earning each regular player 1. Otherwise the impostor
 earns 2; tied/no votes mean escape. No final rescue guess.
 
@@ -241,11 +249,12 @@ interview gaps and are implemented by the server.
 | Finishing a game | Use each participant's one item once in all five modes; automatic final rankings. |
 | Subjective answer input | Short typed explanations; discussion can happen in person or on a separate call. |
 | Voice/Chat points | One point for each accepted explanation; zero for a rejected explanation. |
-| Self-judging | Exclude both uploader and explanation author; with three players, one eligible judge decides each explanation. |
+| Self-judging | Voice excludes uploader and explanation author (one judge at three players). Chat excludes only the explanation author; the uploader can vote (two judges at three players). |
 | Judging completion | Each explanation has a fresh 30-second ballot. Timeout or host-controlled close treats uncast votes as abstentions. Require more yes than no, and reject an explanation with no votes. |
-| Impostor selection | Shuffle all photos and participants independently; each is impostor once; uploader remains eligible. |
+| Impostor selection | Shuffle photo order and use a shuffled participant cycle; each is impostor once, never on their own photo. Uploaders always see clear media. |
+| Impostor results | No per-photo result, score update, or identity reveal in player views. Automatically advance after voting. Show only final rankings after the last photo. |
 | Impostor outcome and points | Unique top suspect catches actual impostor: regulars +1 each; otherwise impostor +2, including ties/no votes. |
-| Round timing | 60-second guesses (90 seconds in Voice), 60-second Impostor discussion, and 30-second ballots. The server advances expired stages; missing guesses get zero. Preparation, Quiz preview, reveals, and results are untimed. |
+| Round timing | 60-second guesses (90 seconds in Voice), 20 seconds per Impostor speaker, and 30-second ballots. The server advances expired stages; missing guesses get zero. Preparation, Quiz preview, reveals, and results are untimed. |
 | Quiz timing | Whole dates, UTC day distance then server receipt order; first guess final, 60-second guessing countdown. |
 | Refresh and host departure | Recover cookie identity and the original deadline. The host can pass control, or active players can manually replace an offline host. Waiting newcomers cannot host an active game. |
 | Upload limits | JPEG/PNG/WebP inputs up to 10 MB; MP3/M4A/WAV up to 20 MB and 60 seconds. |
@@ -260,9 +269,11 @@ interview gaps and are implemented by the server.
 - A late arrival cannot guess or vote in the active game and can participate in the next one.
 - Quiz accuracy outranks speed; speed breaks equal-distance ties; points are 3/2/1/0.
 - Bluffing three players earns the storyteller six points; a true-story guess earns one.
-- Voice and Chat judging exclude the uploader; a 2–2 judging split rejects only that
-  explanation, while a 3–1 split accepts it.
-- The impostor receives only their permitted blurred view before the reveal.
+- Voice judging excludes the uploader; Chat includes the uploader. Both exclude the
+  explanation author. A tied judging split rejects only that explanation.
+- Impostors receive only blurred media; uploaders always receive clear media. Each
+  speaker gets 20 seconds. No Impostor round results or live scores are exposed.
+  Voting moves directly to the next photo, and only final rankings appear at the end.
 - Every completed game automatically displays a final ranking, tied highest scores
   share the win, and starting again resets the game score.
 - Uploaded files remain available in storage after the game as agreed.
@@ -271,9 +282,9 @@ interview gaps and are implemented by the server.
 
 Use [BUILD_PLAN.md](BUILD_PLAN.md) for architecture and verification.
 Use [UI_HANDOFF.md](UI_HANDOFF.md) for UI work, together with the completed
-[research comparison](UI_RESEARCH.md). UI inspiration must adapt to this PRD: room-code flows, combined rankings,
-host rotation, and compulsory speaking turns must not return merely because another
-product uses them.
+[research comparison](UI_RESEARCH.md). UI inspiration must follow the room flows and
+mode-specific rules in this PRD. Combined rankings and automatic host rotation are
+not part of this version.
 
 The selected deployment is one small paid Render server plus Supabase Free for
 private media and durable database state. Implementation does not provision paid

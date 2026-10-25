@@ -10,6 +10,88 @@ import { phaseKey } from '../server/engine.js';
 import type { Command, Session } from '../shared/types.js';
 import type { CommitAction } from '../server/repository.js';
 
+test('impostor speaking order and deadlines recover; concurrent clocks and retries cannot skip turns', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'photo-fumble-speaking-'));
+  let now = 100_000;
+  try {
+    let service = new GameService(new LocalRepository(root, 'test'), () => now);
+    await service.init();
+    const ids = await Promise.all(['A', 'B', 'C'].map((name) => service.join(name)));
+    ids.forEach((id) => service.online.add(id));
+    const envelope = (command: Command) => ({
+      id: randomUUID(),
+      version: service.state.version,
+      gameId: service.state.game?.id,
+      phaseKey: service.state.game ? phaseKey(service.state.game) : undefined,
+      command,
+    });
+    const host = ids[0];
+    await service.command(host, envelope({ type: 'setHost', targetId: host }));
+    await service.command(host, envelope({ type: 'choose', mode: 'impostor' }));
+    for (const id of ids)
+      await service.submission(
+        id,
+        randomUUID(),
+        {
+          id: `asset-${id}`,
+          ownerId: id,
+          gameId: service.state.game!.id,
+          key: `${id}.webp`,
+          blurKey: `${id}-blur.webp`,
+          mime: 'image/webp',
+        },
+        {},
+      );
+    await service.command(host, envelope({ type: 'start' }));
+    const firstSpeaker = service.state.game!.speakerOrder![0];
+    const clue = envelope({ type: 'clue', value: 'Blue shapes' });
+    await service.command(firstSpeaker, clue);
+    const stale = envelope({ type: 'clue', value: 'A late clue' });
+    const snapshot = structuredClone(service.state);
+    service = new GameService(new LocalRepository(root, 'test'), () => now);
+    await service.init();
+    ids.forEach((id) => service.online.add(id));
+    assert.deepEqual(service.state, snapshot);
+    assert.equal(service.state.game!.deadlineAt, now + 20_000);
+    const firstKey = phaseKey(service.state.game!);
+    now = service.state.game!.deadlineAt!;
+    await Promise.all([service.expireRounds(), service.expireRounds()]);
+    assert.equal(service.state.game!.speakerIndex, 1);
+    assert.notEqual(phaseKey(service.state.game!), firstKey);
+    assert.equal(service.state.game!.deadlineAt, now + 20_000);
+    await assert.rejects(() => service.command(firstSpeaker, stale), /stage has ended/i);
+    await service.command(firstSpeaker, clue);
+    assert.equal(service.state.game!.speakerIndex, 1);
+    for (let turn = 1; turn < ids.length; turn++) {
+      now = service.state.game!.deadlineAt!;
+      await service.expireRounds();
+    }
+    assert.equal(service.state.game!.phase, 'vote');
+    assert.equal(service.state.game!.deadlineAt, now + 30_000);
+    const game = service.state.game!;
+    const owner = game.order[0];
+    const impostor = game.impostors[owner];
+    let finalVote;
+    for (const id of ids) {
+      finalVote = envelope({ type: 'vote', targetId: id === impostor ? owner : impostor });
+      await service.command(id, finalVote);
+    }
+    assert.equal(service.state.game!.phase, 'discuss');
+    assert.equal(service.state.game!.index, 1);
+    assert.deepEqual(service.view(host).game!.scores, {});
+    assert.ok(Object.values(service.state.game!.scores).some((score) => score > 0));
+    const version = service.state.version;
+    await service.command(ids.at(-1)!, finalVote!);
+    assert.equal(service.state.version, version);
+    const recovered = new GameService(new LocalRepository(root, 'test'), () => now);
+    await recovered.init();
+    assert.deepEqual(recovered.state, service.state);
+    assert.equal(recovered.view(host).game!.result, undefined);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('saved session survives repository/server recreation, retries do not reroll, stale phases fail', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'photo-fumble-test-'));
   try {

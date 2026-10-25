@@ -156,7 +156,10 @@ test(`${playerCount} browsers play all five modes, refresh safely, and late arri
       await waitPhase(host, 'prepare');
       const prepared = (await state(host)).game!;
       expect(prepared.roster).toHaveLength(playerCount);
-      expect(Object.values(prepared.scores)).toEqual(Array(playerCount).fill(0));
+      if (mode === 'impostor') {
+        expect(prepared.scores).toEqual({});
+        expect(prepared.scoresHidden).toBe(true);
+      } else expect(Object.values(prepared.scores)).toEqual(Array(playerCount).fill(0));
       let late: BrowserContext | undefined;
       if (mode === 'quiz') {
         late = await browser.newContext();
@@ -248,6 +251,37 @@ test(`${playerCount} browsers play all five modes, refresh safely, and late arri
           const views = await Promise.all(pages.map((page) => state(page)));
           expect(views.filter((v) => v.game?.isImpostor)).toHaveLength(1);
           const impostor = ids[views.findIndex((v) => v.game?.isImpostor)];
+          expect(impostor).not.toBe(owner);
+          expect(views[ids.indexOf(owner)].game!.blurred).toBe(false);
+          for (const view of views) {
+            expect(view.game!.scores).toEqual({});
+            expect(view.game!.result).toBeUndefined();
+          }
+          await expect(host.locator('.points')).toHaveCount(0);
+          await expect(host.getByRole('list', { name: 'Speaking order' })).toBeVisible();
+          if (item === 0) {
+            const speaker = pages[ids.indexOf(current.game!.speakerId!)];
+            const listener = pages.find((page) => page !== speaker)!;
+            await expect(speaker.locator('#clue')).toBeEnabled();
+            await expect(listener.locator('#clue')).toBeDisabled();
+            await speaker.locator('#clue').fill('There are warm colours.');
+            await speaker.getByRole('button', { name: 'Share clue', exact: true }).click();
+            const turn = (await state(host)).game!;
+            await listener.reload();
+            await expect(listener.getByText('Connected', { exact: true })).toBeVisible();
+            const restored = (await state(listener)).game!;
+            expect(restored.deadlineAt).toBe(turn.deadlineAt);
+            expect(restored.speakerOrder).toEqual(turn.speakerOrder);
+            expect(restored.speakerId).toBe(turn.speakerId);
+            await capture(host, 'impostor-speaking-desktop');
+            await capture(listener, 'impostor-speaking-phone', true);
+            // Exercise one real server deadline; the engine tests cover every turn.
+            await expect
+              .poll(async () => (await state(host)).game!.speakerTurn, {
+                timeout: 25_000,
+              })
+              .toBe(2);
+          }
           const privateMedia = await Promise.all(
             pages.map((page) =>
               page.request.get(`/api/rooms/${roomCode}/media/${views[0].game!.assetId}`),
@@ -288,10 +322,18 @@ test(`${playerCount} browsers play all five modes, refresh safely, and late arri
               await expect(host.locator('.context')).toContainText('We missed the last train.');
               if (item === 0 && explanation === 0) await capture(host, `${mode}-judge-desktop`);
               for (let i = 0; i < pages.length; i++)
-                if (ids[i] !== owner && ids[i] !== author)
+                if (ids[i] !== author && (mode === 'chat' || ids[i] !== owner))
                   await pages[i].getByRole('button', { name: 'Close enough', exact: true }).click();
             }
           }
+        }
+        if (mode === 'impostor' && item < playerCount - 1) {
+          await expect.poll(async () => (await state(host)).game!.item).toBe(item + 2);
+          await waitPhase(host, 'discuss');
+          await expect(host.getByRole('button', { name: 'Next item', exact: true })).toHaveCount(0);
+          await expect(host.locator('.points')).toHaveCount(0);
+          expect((await state(host)).game!.result).toBeUndefined();
+          continue;
         }
         await waitPhase(host, item === playerCount - 1 ? 'results' : 'reveal');
         if (item === 0) {
@@ -317,13 +359,11 @@ test(`${playerCount} browsers play all five modes, refresh safely, and late arri
       if (mode === 'impostor') await capture(host, 'results-phone', true);
       if (mode === 'impostor') {
         for (const page of pages) {
-          await expect
-            .poll(() =>
-              page
-                .locator('.last-reveal .photo-mount img')
-                .evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0),
-            )
-            .toBe(true);
+          await expect(page.locator('.last-reveal')).toHaveCount(0);
+          const final = (await state(page)).game!;
+          expect(final.result).toBeUndefined();
+          expect(final.assetId).toBeUndefined();
+          expect(final.scoresHidden).toBe(false);
         }
       }
       const otherAfter = await state(otherHost);

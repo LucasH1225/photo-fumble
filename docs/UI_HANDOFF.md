@@ -32,12 +32,15 @@ players' own content and the suspense of guessing, voting, and revealing a memor
 - A complete independent game for the selected mode, followed by a mandatory automatic
   final ranking. Fresh scores for the next game; no cross-mode total.
 - Late arrivals wait for the next game.
-- Voice Detective and Chat Archaeology share judging UI and rules; uploader excluded,
-  majority accepts, tied judging votes reject that explanation.
+- Voice Detective and Chat Archaeology share judging UI. Both exclude the explanation
+  author; Voice excludes the uploader too, while Chat allows the uploader to vote.
+  More yes than no accepts; tied judging votes reject that explanation.
 - Memory Bluff uses two story choices; the storyteller gets two points per person
   fooled and a correct guess earns one.
-- Memory Impostor uses a blurred version of the same photo, with a host-controlled
-  skip-to-vote action and no required on-screen speaking completion.
+- Memory Impostor uploaders always see their clear photo and cannot be its impostor.
+  Each player gets a separate 20-second speaking turn in shuffled order. The host
+  can skip to voting. Voting advances directly to the next photo; hide live scores
+  and round outcomes, and show only final rankings after the last photo.
 - Shared-library browsing is an optional side feature, not a prerequisite screen.
 
 ## UI deliverables

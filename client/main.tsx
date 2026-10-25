@@ -802,7 +802,11 @@ function Roster({ view, send, disabled }: { view: PlayerView; send: Send; disabl
                         : 'Here'}
                 </small>
               </div>
-              {g && !view.waiting && g.phase !== 'prepare' && g.roster.includes(p.id) ? (
+              {g &&
+              !g.scoresHidden &&
+              !view.waiting &&
+              g.phase !== 'prepare' &&
+              g.roster.includes(p.id) ? (
                 <b className="points">{g.scores[p.id] ?? 0}</b>
               ) : (
                 <span
@@ -814,9 +818,11 @@ function Roster({ view, send, disabled }: { view: PlayerView; send: Send; disabl
           ))}
         </ul>
         <p className="support">
-          {view.hostId
-            ? `${nameOf(view, view.hostId)} controls the flow. Scores belong to this game only.`
-            : 'Choose your host below, or let us pick someone at random.'}
+          {g?.scoresHidden
+            ? 'Scores stay hidden until the final ranking.'
+            : view.hostId
+              ? `${nameOf(view, view.hostId)} controls the flow. Scores belong to this game only.`
+              : 'Choose your host below, or let us pick someone at random.'}
         </p>
         {view.hostId ? <HostControls view={view} send={send} disabled={disabled} /> : null}
       </div>
@@ -1257,10 +1263,12 @@ function Countdown({
   deadlineAt,
   serverTime,
   phase,
+  speaking = false,
 }: {
   deadlineAt: number;
   serverTime: number;
   phase: ViewGame['phase'];
+  speaking?: boolean;
 }) {
   const initial = Math.max(0, Math.ceil((deadlineAt - serverTime) / 1000));
   const [seconds, setSeconds] = useState(initial);
@@ -1274,7 +1282,14 @@ function Countdown({
     const interval = window.setInterval(update, 250);
     return () => window.clearInterval(interval);
   }, [deadlineAt, serverTime]);
-  const label = phase === 'guess' ? 'Guessing' : phase === 'discuss' ? 'Discussion' : 'Voting';
+  const label =
+    phase === 'guess'
+      ? 'Guessing'
+      : phase === 'discuss'
+        ? speaking
+          ? 'Speaking'
+          : 'Discussion'
+        : 'Voting';
   return (
     <div className={`round-countdown${seconds <= 10 ? ' urgent' : ''}`}>
       <div>
@@ -1314,6 +1329,7 @@ function Play({ view, send, disabled }: { view: PlayerView; send: Send; disabled
               deadlineAt={g.deadlineAt}
               serverTime={view.serverTime}
               phase={g.phase}
+              speaking={Boolean(g.speakerId)}
             />
           ) : null}
           {g.phase === 'preview' ? (
@@ -1386,8 +1402,28 @@ function Play({ view, send, disabled }: { view: PlayerView; send: Send; disabled
                   ? 'You are the impostor. Work out the photo without giving yourself away.'
                   : 'You have the clear photo. Describe it without saying too much.'}
               </span>
-              <h2>Give a little away.</h2>
-              <p>Talk aloud or leave one short clue. The host can move straight to voting.</p>
+              <h2>
+                {g.speakerId
+                  ? g.speakerId === view.me.id
+                    ? 'Your turn to describe it.'
+                    : `${nameOf(view, g.speakerId)}’s turn.`
+                  : 'Give a little away.'}
+              </h2>
+              <p>
+                {g.speakerId
+                  ? `Turn ${g.speakerTurn} of ${g.roster.length}. Each person has 20 seconds. Talk aloud or share an optional clue during your turn.`
+                  : 'Talk aloud or leave one short clue. The host can move straight to voting.'}
+              </p>
+              {g.speakerOrder ? (
+                <ol className="speaking-order" aria-label="Speaking order">
+                  {g.speakerOrder.map((id, index) => (
+                    <li key={id} aria-current={id === g.speakerId ? 'step' : undefined}>
+                      {index + 1}. {nameOf(view, id)}
+                      {id === g.speakerId ? ' · Speaking now' : ''}
+                    </li>
+                  ))}
+                </ol>
+              ) : null}
               {g.clue ? (
                 <p className="receipt">✓ Your clue: {g.clue}</p>
               ) : (
@@ -1403,8 +1439,17 @@ function Play({ view, send, disabled }: { view: PlayerView; send: Send; disabled
                     maxLength={300}
                     value={value}
                     onChange={(e) => setValue(e.target.value)}
+                    disabled={disabled || g.canClue === false}
                   />
-                  <Button disabled={disabled || !value.trim()}>Share clue</Button>
+                  <Button disabled={disabled || g.canClue === false || !value.trim()}>
+                    Share clue
+                  </Button>
+                  {g.speakerId && g.speakerId !== view.me.id ? (
+                    <p className="support">
+                      Wait for your speaking turn. The countdown moves to the next person
+                      automatically.
+                    </p>
+                  ) : null}
                 </form>
               )}
               {Object.keys(g.clues ?? {}).length ? (
@@ -1768,13 +1813,15 @@ function Results({ view }: { view: PlayerView }) {
           </ol>
         </div>
       </Panel>
-      <details className="last-reveal" open>
-        <summary>The final reveal</summary>
-        <div className="play-grid final-reveal-grid">
-          {g.roster.includes(view.me.id) ? <Media view={view} /> : null}
-          <Reveal view={view} />
-        </div>
-      </details>
+      {!g.hideRoundResults ? (
+        <details className="last-reveal" open>
+          <summary>The final reveal</summary>
+          <div className="play-grid final-reveal-grid">
+            {g.roster.includes(view.me.id) ? <Media view={view} /> : null}
+            <Reveal view={view} />
+          </div>
+        </details>
+      ) : null}
     </>
   );
 }

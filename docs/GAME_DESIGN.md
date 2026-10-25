@@ -84,9 +84,10 @@ each time, not multiple recordings.
 - Hide speakers' identities with manual rectangle covers, flattened into the stored
   image pixels. The uploader reviews and confirms the sanitized preview.
 - Other players guess the context. Reveal the real context before judging.
-- Use the same judging rule as Voice Detective: the uploader sits out, a simple
-  majority accepts an explanation, and an equal split rejects that explanation.
-- An accepted explanation earns 1 point; uploader and explanation author cannot judge it.
+- The screenshot uploader can vote on other players’ explanations. Only the
+  explanation author sits out. More yes than no accepts; an equal split rejects.
+- An accepted explanation earns 1 point. With three players there are two eligible
+  judges, including the uploader; a 1–1 vote rejects the explanation.
 
 ## Memory Impostor — agreed setup
 
@@ -96,15 +97,21 @@ each time, not multiple recordings.
   same photo, rather than a different photo.
 - The blur should preserve some rough features, shapes, and colours while making the
   subject hard to identify. Its strength needs visual review during implementation.
-- Players can take turns describing the photo, with one description each as the
-  suggested default before voting.
+- Each photo has a shuffled speaking order, including the uploader. Every player
+  gets one server-timed 20-second turn, then voting opens automatically. Optional
+  typed clues can only be submitted during the player’s turn; speech happens aloud
+  or on an external call. Submitting a clue does not shorten the turn.
 - The host controls a skip-to-vote button. It can move directly from discussion to
   voting without requiring every player to complete an on-screen speaking turn.
   This supports groups who discuss aloud and are ready to vote.
 - The skip applies to discussion, not to the mandatory final ranking.
-- Use all uploaded photos once. Shuffle photo order and independently shuffle role
-  assignments so every participant is impostor once. The uploader is eligible too,
-  as explicitly chosen by the user, even if they recognize their own photo.
+- Use all uploaded photos once, in shuffled order. Assign roles in a shuffled cycle
+  so every participant is impostor once and never on their own photo. The uploader
+  always receives the clear image.
+- After voting, move automatically to the next photo without revealing who was
+  caught, who escaped, or the clear image. Live scores and round results are omitted
+  from player views. Show only the mandatory final ranking at the end; no round
+  breakdown or final photo reveal.
 - One suspect vote per player, no self-voting. A unique highest-voted actual impostor
   is caught: regular players earn 1 each. Otherwise the impostor earns 2. Ties/no
   votes mean escape. There is no additional rescue guess.
@@ -118,12 +125,12 @@ each time, not multiple recordings.
 ## Adopted demo defaults
 
 - Three connected players minimum for all five modes; once gathered, anyone requests
-  the random host election. With three players, Voice/Chat has one eligible judge
-  per explanation, and Impostor has one impostor and two regular players.
+  the random host election. With three players, Voice has one eligible judge per
+  explanation, Chat has two, and Impostor has one impostor and two regular players.
 - Full calendar dates and server receipt ordering in Quiz. First submissions are final;
   the host opens guessing after preview and can close missing responses.
-- Server-controlled countdowns: 60 seconds for guesses (90 in Voice), 60 seconds for
-  Impostor discussion, and 30 seconds for each judging or suspect ballot. Deadlines
+- Server-controlled countdowns: 60 seconds for guesses (90 in Voice), 20 seconds for
+  each Impostor speaker, and 30 seconds for each judging or suspect ballot. Deadlines
   survive refresh/restart. Stages close automatically; missing guesses score zero
   and uncast votes abstain. Preparation, Quiz preview, reveals, and results are untimed.
 - Same-browser cookies restore identity after refresh. Host transfers retain scores,
@@ -137,3 +144,11 @@ each time, not multiple recordings.
 See [the deployment guide](DEPLOYMENT.md) for setup and stopping charges.
 
 Terminology is recorded in [the glossary](../GLOSSARY.md).
+
+## Rule-update compatibility — 25 October 2026
+
+Newly selected games store rules version 2 in the existing session JSON; no SQL or
+media migration is required. Saved preparation adopts the new rules when starting.
+Already-started games without this version retain their saved roles, timing,
+judging eligibility, and reveals until they finish. Rooms, player identities,
+existing file keys, retention, and the other modes’ scoring stay unchanged.

@@ -108,3 +108,24 @@ existing participants’ games. A separate instance/namespace remains preferable
 The automated phone check uses Chromium at a phone viewport. No physical Safari,
 physical-device audio, cross-network multiplayer, or hosted restart-recovery test
 has been completed yet.
+
+## Impostor turns and Chat judging — 25 October 2026
+
+- Typecheck, all 49 unit/integration tests, and the production build passed.
+- Three- and four-player browser suites passed all four cases, completing every
+  item in all five modes while a second room remained independent.
+- Uploaders never receive their own photo’s impostor assignment or blurred media.
+  Repeated assignment checks cover three, four, and six players with balanced roles.
+- Every Impostor speaker receives a separate 20-second server deadline. Browser
+  tests observed a real turn expire after refresh; persistence tests cover saved
+  order, deadlines, stale actions, concurrent ticks, and idempotent vote retries.
+- Voting moves directly to the next photo. Player payloads omit round results and
+  live scores; final views expose rankings only and no final photo endpoint.
+- Chat uploaders can judge other explanations; authors cannot. Tests cover a
+  three-player 1–1 rejection and larger-group majority/abstention behavior. Voice
+  judging remains unchanged.
+- Saved games already in progress retain the previous rules; saved preparation
+  adopts the new rules when starting. No SQL migration or file-key changes.
+- Phone screenshots were reviewed for speaking turns and final rankings. These
+  are Chromium viewport checks, not physical iPhone/Safari/audio validation.
+- Publication and hosted gameplay verification are recorded after deployment.
