@@ -20,6 +20,8 @@ import {
   type Mode,
 } from '../shared/types';
 import './style.css';
+import './home.css';
+import { MemoryRiver, PhotoCredits } from './MemoryRiver';
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { credentials: 'same-origin', ...init });
@@ -147,13 +149,13 @@ function Home({ navigate }: { navigate: (path: string) => void }) {
     };
   }, []);
   return (
-    <>
+    <div className="photo-home">
       <header className="topbar">
         <a className="brand" href="/">
           <Aperture />
           Photo Fumble
         </a>
-        <span>A party game for your people</span>
+        <span>A little blurry. A lot familiar.</span>
       </header>
       {error ? (
         <div className="error-banner" role="alert">
@@ -172,7 +174,8 @@ function Home({ navigate }: { navigate: (path: string) => void }) {
         <span>Good friends. Questionable memories.</span>
         <span>Five ways to remember differently.</span>
       </footer>
-    </>
+      <PhotoCredits />
+    </div>
   );
 }
 function RoomTools({ code, navigate }: { code?: string; navigate: (path: string) => void }) {
@@ -537,32 +540,21 @@ function Join({
     }
   }
   return (
-    <main className="join-layout">
-      <section className="join-intro">
-        <span className="little-photo" aria-hidden="true">
-          <Aperture />
-        </span>
+    <main className="photo-join">
+      <section className="photo-intro">
         <h1>
           You had
           <br />
           to be there.
         </h1>
         <p>
-          Or at least remember it differently.
+          The late trains. The birthday candles.
           <br />
-          Bring your photos, voice notes, and forgotten chats. We’ll bring the questions.
+          The stories you remember differently.
         </p>
-        <div className="mode-ribbon">
-          {MODES.map((m) => (
-            <span key={m}>
-              {MODE_INFO[m].icon} {MODE_INFO[m].name}
-            </span>
-          ))}
-        </div>
       </section>
-      <Panel className="join-panel">
-        <h2>Find your people.</h2>
-        <p>Your group, your room. Join with a nickname your friends will recognize.</p>
+      <MemoryRiver />
+      <section className="photo-entry" aria-label="Find your people">
         <div className="room-entry-actions" aria-label="Room action">
           <Button
             type="button"
@@ -620,11 +612,12 @@ function Join({
                 : 'Join room'}
           </Button>
         </form>
-        <p className="support">
-          You’ll need at least {MIN_PLAYERS} players in your room. Everyone joins on their own phone
-          or computer.
+        <p className="photo-support">
+          Bring your photos, voice notes, and forgotten chats.
+          <br />
+          Play with {MIN_PLAYERS} or more people.
         </p>
-      </Panel>
+      </section>
     </main>
   );
 }
