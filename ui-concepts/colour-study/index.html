@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en" data-palette="petrol">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#2d2038" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='16' fill='%232d2038'/%3E%3Ccircle cx='24' cy='24' r='11' fill='none' stroke='%23d9c9f3' stroke-width='3'/%3E%3C/svg%3E"
+    />
+    <title>Photo Fumble — colour comparison</title>
+    <link rel="stylesheet" href="../river-join/river.css" />
+    <link rel="stylesheet" href="colours.css" />
+    <script src="colours.js" defer></script>
+  </head>
+  <body>
+    <section class="palette-toolbar" aria-label="Colour directions">
+      <div class="palette-intro">
+        <h1>A different mood, same memories.</h1>
+        <p>Choose a palette to compare it on the photo homepage.</p>
+      </div>
+      <div class="palette-choices" role="group" aria-label="Choose a palette">
+        <button type="button" data-palette-choice="petrol" aria-pressed="true">
+          <i style="--chip: #173b46" aria-hidden="true"></i
+          ><span>Petrol + ivory<small>My recommendation</small></span>
+        </button>
+        <button type="button" data-palette-choice="ivory" aria-pressed="false">
+          <i style="--chip: #f6f3eb" aria-hidden="true"></i
+          ><span>Ivory + cobalt<small>Bright and playful</small></span>
+        </button>
+        <button type="button" data-palette-choice="brick" aria-pressed="false">
+          <i style="--chip: #5a2927" aria-hidden="true"></i
+          ><span>Brick + peach<small>Warm and nostalgic</small></span>
+        </button>
+        <button type="button" data-palette-choice="plum" aria-pressed="false">
+          <i style="--chip: #2d2038" aria-hidden="true"></i
+          ><span>Current plum<small>For comparison</small></span>
+        </button>
+      </div>
+      <p class="palette-note" id="palette-note" role="status">
+        Petrol + ivory: calm, rich colour that gives both warm and cool photographs room to stand
+        out.
+      </p>
+    </section>
+    <header class="review-bar">
+      <div><strong>Photo Fumble</strong><span>Colour preview · sample photos</span></div>
+      <div class="review-actions">
+        <div class="device-controls" role="group" aria-label="Preview size">
+          <button type="button" data-device="desktop" aria-pressed="true">Full width</button>
+          <button type="button" data-device="phone" aria-pressed="false">Phone</button>
+        </div>
+        <button class="motion-control" type="button" id="motion-toggle" data-paused="false">
+          <span class="motion-icon" aria-hidden="true"></span
+          ><span id="motion-label">Pause motion</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="preview-frame" id="preview-frame" data-device="desktop">
+      <div class="site">
+        <header class="site-header">
+          <a class="brand" href="#" aria-label="Photo Fumble home">
+            <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <rect
+                x="5"
+                y="5"
+                width="38"
+                height="38"
+                rx="15"
+                stroke="currentColor"
+                stroke-width="2"
+              />
+              <circle cx="24" cy="24" r="9" stroke="currentColor" stroke-width="2" />
+              <path
+                d="m24 5 8 12m11 7-14 7m-5 12-8-12M5 24l14-7"
+                stroke="currentColor"
+                stroke-width="2"
+              />
+            </svg>
+            Photo Fumble
+          </a>
+          <span class="header-note">A little blurry. A lot familiar.</span>
+        </header>
+
+        <main class="hero">
+          <div class="intro">
+            <h1>You had<br />to be there.</h1>
+            <p>
+              The late trains. The birthday candles.<br class="desktop-break" />
+              The stories you remember differently.
+            </p>
+          </div>
+
+          <div
+            class="river"
+            id="river"
+            role="img"
+            aria-label="A gently flowing ribbon of sample memories: friends, birthdays, journeys, and nights together."
+          >
+            <div class="river-photos" id="river-photos" aria-hidden="true"></div>
+          </div>
+
+          <form class="join-form" id="join-form">
+            <div class="colour-room-tabs" role="group" aria-label="Room action">
+              <button type="button" id="join-tab" aria-pressed="true">Join a room</button>
+              <button type="button" id="create-tab" aria-pressed="false">Create a room</button>
+            </div>
+            <div id="code-field">
+              <label for="room-code">Room code</label
+              ><input
+                id="room-code"
+                inputmode="numeric"
+                pattern="[0-9]{6}"
+                maxlength="6"
+                placeholder="Six-digit code"
+                required
+              />
+            </div>
+            <label for="nickname">Your nickname</label>
+            <input
+              type="text"
+              id="nickname"
+              name="nickname"
+              autocomplete="off"
+              placeholder="Your nickname"
+              maxlength="24"
+              required
+            />
+            <button class="join-button" type="submit">Join room</button>
+            <p class="form-preview" id="form-preview" role="status" hidden></p>
+            <p class="join-support">
+              Bring your photos, voice notes, and forgotten chats.<br />Play with 3 or more people.
+            </p>
+          </form>
+        </main>
+
+        <footer class="site-footer">
+          <span>Good friends. Questionable memories.</span>
+          <span>Five ways to remember differently.</span>
+        </footer>
+      </div>
+    </div>
+
+    <div class="palette-swatches" aria-label="Selected palette colours">
+      <span><i class="swatch-base"></i>Background <b id="hex-base">#173B46</b></span>
+      <span><i class="swatch-accent"></i>Headline / button <b id="hex-accent">#F0E4C8</b></span>
+      <span><i class="swatch-paper"></i>Text <b id="hex-paper">#FBF8EF</b></span>
+    </div>
+    <div class="review-footer">
+      <p id="preview-feedback">Colour preview only. The published site is unchanged.</p>
+      <details class="credits">
+        <summary>Sample photo credits</summary>
+        <p>
+          Public sample photography, used only for this concept. These images are not player
+          uploads.
+        </p>
+        <ul>
+          <li>
+            <a
+              href="https://unsplash.com/photos/friends-enjoy-a-sunset-picnic-by-the-sea-b6QEE_6ykp0"
+              target="_blank"
+              rel="noreferrer"
+              >Picnic — Kelvin Zyteng / Unsplash</a
+            >
+          </li>
+          <li>
+            <a
+              href="https://www.pexels.com/photo/a-man-surprising-a-person-with-a-birthday-cake-7254227/"
+              target="_blank"
+              rel="noreferrer"
+              >Birthday — cottonbro studio / Pexels</a
+            >
+          </li>
+          <li>
+            <a
+              href="https://www.pexels.com/photo/friends-sitting-on-a-beach-during-sunset-17499779/"
+              target="_blank"
+              rel="noreferrer"
+              >Beach — el jusuf / Pexels</a
+            >
+          </li>
+          <li>
+            <a
+              href="https://www.pexels.com/photo/photo-of-a-group-of-friends-talking-while-walking-7972658/"
+              target="_blank"
+              rel="noreferrer"
+              >City walk — George Pak / Pexels</a
+            >
+          </li>
+          <li>
+            <a
+              href="https://www.pexels.com/photo/friends-during-concert-15130393/"
+              target="_blank"
+              rel="noreferrer"
+              >Concert — Adrian Camilo / Pexels</a
+            >
+          </li>
+          <li>
+            <a
+              href="https://www.pexels.com/photo/view-of-train-from-window-3233935/"
+              target="_blank"
+              rel="noreferrer"
+              >Train journey — 龔 月強 / Pexels</a
+            >
+          </li>
+          <li>
+            <a
+              href="https://www.pexels.com/photo/photo-of-people-holding-pizza-3944307/"
+              target="_blank"
+              rel="noreferrer"
+              >Pizza night — cottonbro studio / Pexels</a
+            >
+          </li>
+        </ul>
+        <p>
+          <a href="https://unsplash.com/license" target="_blank" rel="noreferrer"
+            >Unsplash License</a
+          >
+          ·
+          <a href="https://www.pexels.com/license/" target="_blank" rel="noreferrer"
+            >Pexels License</a
+          >
+        </p>
+      </details>
+    </div>
+    <noscript><p class="noscript">Enable JavaScript to see the memory river preview.</p></noscript>
+  </body>
+</html>

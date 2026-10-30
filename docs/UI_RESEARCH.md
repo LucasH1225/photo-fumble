@@ -1,5 +1,8 @@
 # Photo Fumble — UI research and recommendations
 
+> Historical design/research snapshot. The 25 October room-code update supersedes
+> earlier single-lobby restrictions. Current behavior is defined in [PRD.md](PRD.md).
+
 **Research date:** 24 October 2026.  
 **Coverage:** twelve distinct products across quizzes, party games, guessing, voting,
 and photo viewing. Jackbox is counted once, although two of its games are discussed.

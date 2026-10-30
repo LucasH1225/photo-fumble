@@ -1,5 +1,8 @@
 # Photo Fumble — feature-first design research synthesis
 
+> Historical design/research snapshot. The 25 October room-code update supersedes
+> earlier single-lobby restrictions. Current behavior is defined in [PRD.md](PRD.md).
+
 24 October 2026. A second research pass for discussion before mockup construction.
 Read with [the original twelve-product report](UI_RESEARCH.md) and [the PRD](PRD.md).
 This pass adds SongPop, bringing coverage to **thirteen distinct products**. Jackbox

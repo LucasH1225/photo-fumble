@@ -3,14 +3,19 @@
 Decisions confirmed during the design conversation on 24 October 2026. This is the
 concise decision record; the [PRD](PRD.md) adds functional requirements, examples, and
 clearly marked proposals. All five modes are needed for the same-day hackathon demo.
+Updated 25 October 2026 to add round countdowns, return to lobby, and host selection/transfer.
 
 - All five modes must be playable: Memory Quiz, Voice Detective, Chat Archaeology,
   Memory Bluff, and Memory Impostor.
-- Everyone opening the demo joins one shared game session. There are no room codes
-  or multiple simultaneous rooms in the demo.
+- Groups create a reusable room or join with its six-digit code and nickname.
+  Different rooms have separate players, uploads, hosts, games, and rankings.
+- At least three connected players in that room are required to start a new game.
+- Room codes remain reusable. Leaving a room does not delete membership or reset play.
+- Existing players can resume the previous shared game at `/legacy`; new players use rooms.
+- Encryption is deferred; storage remains private but accessible to its administrator.
 - Players identify themselves with nicknames and may join from different locations.
-- The first host is chosen randomly. That player remains host for the shared session; hosting
-  does not rotate.
+- Players can choose the first host directly or at random. The host can pass control
+  to another connected player; if the host goes offline, an active player can select a replacement.
 - The host controls the game's progress and chooses which mode to play next.
 - New arrivals wait for the next mode/game instead of joining the current game midway.
 
@@ -20,7 +25,8 @@ clearly marked proposals. All five modes are needed for the same-day hackathon d
 2. Players upload and prepare the material needed for that game. Memory Impostor can
    use uploaded photos too; a shared library is another possible source, not a requirement.
 3. Everyone plays the selected mode. When it ends, its final ranking appears automatically.
-4. The host chooses what to play next, including repeating the same mode if desired.
+4. The host returns everyone to the lobby or chooses what to play next, including
+   repeating the same mode if desired. Players and uploads are retained.
 
 Prepare fresh material when starting another play. Do not require everyone to upload
 material for all five modes before the game starts. There is no fixed sequence of modes.
@@ -78,9 +84,10 @@ each time, not multiple recordings.
 - Hide speakers' identities with manual rectangle covers, flattened into the stored
   image pixels. The uploader reviews and confirms the sanitized preview.
 - Other players guess the context. Reveal the real context before judging.
-- Use the same judging rule as Voice Detective: the uploader sits out, a simple
-  majority accepts an explanation, and an equal split rejects that explanation.
-- An accepted explanation earns 1 point; uploader and explanation author cannot judge it.
+- The screenshot uploader can vote on other players’ explanations. Only the
+  explanation author sits out. More yes than no accepts; an equal split rejects.
+- An accepted explanation earns 1 point. With three players there are two eligible
+  judges, including the uploader; a 1–1 vote rejects the explanation.
 
 ## Memory Impostor — agreed setup
 
@@ -90,15 +97,21 @@ each time, not multiple recordings.
   same photo, rather than a different photo.
 - The blur should preserve some rough features, shapes, and colours while making the
   subject hard to identify. Its strength needs visual review during implementation.
-- Players can take turns describing the photo, with one description each as the
-  suggested default before voting.
+- Each photo has a shuffled speaking order, including the uploader. Every player
+  gets one server-timed 20-second turn, then voting opens automatically. Optional
+  typed clues can only be submitted during the player’s turn; speech happens aloud
+  or on an external call. Submitting a clue does not shorten the turn.
 - The host controls a skip-to-vote button. It can move directly from discussion to
   voting without requiring every player to complete an on-screen speaking turn.
   This supports groups who discuss aloud and are ready to vote.
 - The skip applies to discussion, not to the mandatory final ranking.
-- Use all uploaded photos once. Shuffle photo order and independently shuffle role
-  assignments so every participant is impostor once. The uploader is eligible too,
-  as explicitly chosen by the user, even if they recognize their own photo.
+- Use all uploaded photos once, in shuffled order. Assign roles in a shuffled cycle
+  so every participant is impostor once and never on their own photo. The uploader
+  always receives the clear image.
+- After voting, move automatically to the next photo without revealing who was
+  caught, who escaped, or the clear image. Live scores and round results are omitted
+  from player views. Show only the mandatory final ranking at the end; no round
+  breakdown or final photo reveal.
 - One suspect vote per player, no self-voting. A unique highest-voted actual impostor
   is caught: regular players earn 1 each. Otherwise the impostor earns 2. Ties/no
   votes mean escape. There is no additional rescue guess.
@@ -111,11 +124,18 @@ each time, not multiple recordings.
 
 ## Adopted demo defaults
 
-- Four connected players minimum; once gathered, anyone requests the random host election.
+- Three connected players minimum for all five modes; once gathered, anyone requests
+  the random host election. With three players, Voice has one eligible judge per
+  explanation, Chat has two, and Impostor has one impostor and two regular players.
 - Full calendar dates and server receipt ordering in Quiz. First submissions are final;
-  no countdown. The host opens guessing after preview and can close missing responses.
-- Same-browser cookies restore identity after refresh. Host stays fixed; if lost,
-  use the stopped-server operator reset. New arrivals wait, existing participants recover.
+  the host opens guessing after preview and can close missing responses.
+- Server-controlled countdowns: 60 seconds for guesses (90 in Voice), 20 seconds for
+  each Impostor speaker, and 30 seconds for each judging or suspect ballot. Deadlines
+  survive refresh/restart. Stages close automatically; missing guesses score zero
+  and uncast votes abstain. Preparation, Quiz preview, reveals, and results are untimed.
+- Same-browser cookies restore identity after refresh. Host transfers retain scores,
+  roles, uploads, and deadlines. Active games can only transfer to current participants;
+  waiting newcomers remain ineligible until the game ends.
 - Images: JPEG/PNG/WebP, 10 MB input; recordings: MP3/M4A/WAV, 20 MB and 60 seconds.
 - Production: one small paid Render server plus Supabase Free for files and database.
   Accounts and paid resources have not been provisioned by implementation.
@@ -124,3 +144,11 @@ each time, not multiple recordings.
 See [the deployment guide](DEPLOYMENT.md) for setup and stopping charges.
 
 Terminology is recorded in [the glossary](../GLOSSARY.md).
+
+## Rule-update compatibility — 25 October 2026
+
+Newly selected games store rules version 2 in the existing session JSON; no SQL or
+media migration is required. Saved preparation adopts the new rules when starting.
+Already-started games without this version retain their saved roles, timing,
+judging eligibility, and reveals until they finish. Rooms, player identities,
+existing file keys, retention, and the other modes’ scoring stay unchanged.

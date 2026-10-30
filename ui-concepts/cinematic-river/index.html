@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#10171e" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='12' fill='%2310171e'/%3E%3Cpath d='M9 18c10-12 20 12 30 0M9 30c10-12 20 12 30 0' stroke='%23dbe7f1' fill='none' stroke-width='2'/%3E%3C/svg%3E"
+    />
+    <title>Photo Fumble — the river of memories</title>
+    <link rel="stylesheet" href="homepage.css" />
+    <script src="homepage.js" defer></script>
+  </head>
+  <body>
+    <div class="review-toolbar">
+      <div><strong>The river of memories</strong><span>Homepage concept · sample photos</span></div>
+      <div class="review-actions">
+        <div class="size-controls" role="group" aria-label="Preview width">
+          <button type="button" data-size="full" aria-pressed="true">Full width</button>
+          <button type="button" data-size="phone" aria-pressed="false">Phone</button>
+        </div>
+        <button type="button" id="motion-toggle" class="motion-toggle" data-paused="false">
+          <span aria-hidden="true" class="motion-symbol"></span
+          ><span id="motion-label">Pause motion</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="preview-frame" id="preview-frame" data-size="full">
+      <div class="site">
+        <header class="site-header">
+          <a class="wordmark" href="#" aria-label="Photo Fumble home"
+            ><svg viewBox="0 0 36 36" fill="none" aria-hidden="true">
+              <path
+                d="M5 12c9-11 17 11 26 0M5 24c9-11 17 11 26 0"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+              /></svg
+            >Photo Fumble</a
+          >
+          <span class="header-note">A game made of your memories.</span>
+        </header>
+
+        <main class="hero" id="hero">
+          <div
+            class="landscape"
+            id="landscape"
+            role="img"
+            aria-label="A silver river flowing through a misty canyon. Sample memories drift from the distant current toward the foreground."
+          >
+            <img
+              class="landscape-poster"
+              src="river-study-v1.png"
+              alt=""
+              width="1672"
+              height="941"
+              fetchpriority="high"
+            />
+            <canvas class="water-canvas" id="water-canvas" aria-hidden="true"></canvas>
+            <div class="mist mist-far" id="mist-far" aria-hidden="true"></div>
+            <div class="memory-photos" id="memory-photos" aria-hidden="true"></div>
+            <div class="mist mist-near" id="mist-near" aria-hidden="true"></div>
+          </div>
+          <div class="reading-shade" aria-hidden="true"></div>
+
+          <section class="welcome">
+            <h1>Every memory<br />comes back.</h1>
+            <p class="welcome-copy">
+              The stories behind your photos.<br />The moments only your friends understand.<br />Turn
+              them into a game.
+            </p>
+            <form id="join-form" class="join-form">
+              <label for="nickname">Your nickname</label>
+              <input
+                id="nickname"
+                name="nickname"
+                type="text"
+                placeholder="What do your friends call you?"
+                maxlength="24"
+                autocomplete="off"
+                required
+              />
+              <button type="submit" class="join-button">Join friends</button>
+              <p class="join-receipt" id="join-receipt" role="status" hidden></p>
+              <p class="join-help">3 or more people. One shared story at a time.</p>
+            </form>
+          </section>
+          <div class="scene-caption" aria-hidden="true">
+            <span class="caption-line"></span>Some moments stay with you.
+          </div>
+        </main>
+
+        <footer class="site-footer">
+          <span>Good friends. Questionable memories.</span
+          ><span>Photos, voice notes, and forgotten chats.</span>
+        </footer>
+      </div>
+    </div>
+
+    <div class="review-footer">
+      <p>This is a visual concept. The form doesn’t create a game session.</p>
+      <details>
+        <summary>About the imagery</summary>
+        <p>
+          Original generated river artwork with subtle water distortion and mist. Sample photos are
+          reused from the earlier concept; no player uploads are used.
+        </p>
+        <a href="../river-join/photo-credits.json" target="_blank" rel="noreferrer"
+          >Photo credits and sources</a
+        ><span id="water-status"></span>
+      </details>
+    </div>
+    <noscript
+      ><p class="noscript">
+        The artwork and form remain visible. Enable JavaScript to preview motion.
+      </p></noscript
+    >
+  </body>
+</html>

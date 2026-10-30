@@ -5,8 +5,12 @@ photos, recordings, and chat excerpts.
 
 ## Language
 
+**Room**:
+A reusable space for one group, entered with a six-digit code or invite link.
+Its players, host, games, and rankings are separate from other groups.
+
 **Session**:
-The gathering of players sharing a host and mode selection. A session can contain
+The gathering of players within one room sharing a host and mode selection. A session can contain
 successive games, each with its own score.
 
 **Mode**:
@@ -23,8 +27,8 @@ The term does not imply a fixed sequence, numbered stages, or a change of mode.
 _Avoid_: Using "round" and "mode" interchangeably.
 
 **Host**:
-The player who controls the shared session's progress and chooses its next mode. The
-host is chosen randomly at the beginning and stays the same across mode changes.
+The player who controls their room's session progress and chooses its next mode.
+Players may select a host directly or randomly, and hosting can pass to another player.
 
 **Uploader**:
 A player who supplies a photo, recording, or chat excerpt for use in a mode.

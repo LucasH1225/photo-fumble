@@ -9,22 +9,27 @@ are provisioned automatically. Product behavior is defined in the [PRD](PRD.md).
 - `shared/types.ts`: mode, phase, command, receipt, and personalized view contracts.
 - `server/engine.ts`: pure rules, role/phase validation, scoring, media authorization,
   and player-filtered snapshots.
-- `server/service.ts`: serialized durable mutations, action deduplication, recovery.
+- `server/service.ts`: serialized durable mutations, action deduplication, recovery,
+  and durable deadline expiry driven by the server clock.
 - `server/repository.ts`: atomic local-file adapter for development and Supabase RPC
   adapter for production. The database transaction commits state and receipt together.
 - `server/media.ts`: content validation, orientation/EXIF normalization, flattened
   screenshot masking, and separately encoded blur derivatives.
-- `server/index.ts`: HTTP, signed guest cookies, origin checks, uploads, Socket.IO,
+- `server/rooms.ts`: persistent room allocation, independent services, and idle cache eviction.
+- `server/room-routes.ts`: room-scoped joins, upload processing, and media access.
+- `server/index.ts`: HTTP, signed guest cookies, origin checks, Socket.IO,
   rate limits, private media access, static frontend, and health checks.
 - `client/`: responsive React interface based on Pocket Prints.
 - `supabase/migrations/001_initial.sql`: server-only tables and atomic commit RPC.
-- `tests/`: engine, persistence, media, and four-browser five-mode walkthrough.
+- `tests/`: engine, persistence, media, and three-/four-player five-mode walkthrough.
 
 Commands: `npm run dev`, `npm run typecheck`, `npm test`, `npm run test:e2e`,
 `npm run build`, `npm start`, and `npm run session:reset -- --confirm`.
 
-HTTP interfaces: `POST /api/session/join`, `GET /api/session`, `POST /api/uploads`,
-`GET /api/media/:assetId`, `GET /api/health`. Socket.IO carries `command` with an
+HTTP interfaces: `POST /api/rooms` creates a room. Coded-room session/join, upload,
+and media routes live under `/api/rooms/:code`; `GET /api/health` remains global.
+Unscoped session/media endpoints serve existing legacy members only. Socket.IO
+authentication includes `roomCode` and carries `command` with an
 acknowledgement and per-player `state` updates. Commands include unique IDs, game
 identity, and a phase token. Version changes within the same phase do not reject
 legitimate concurrent responses; old game/phase tokens do.
@@ -65,8 +70,8 @@ Maintain these concepts separately:
 
 | Concept | Example contents |
 | --- | --- |
-| Shared session | Player identities and nicknames, fixed host, waiting newcomers. |
-| Current game | Selected mode, participant snapshot, phase, scores, submission order. |
+| Rooms | Reusable six-digit codes, per-room state/presence/media/receipts, stable browser identities, transferable host, waiting newcomers. |
+| Current game | Selected mode, participant snapshot, phase, deadline, scores, submission order. |
 | Submission | Owner, file reference, media type, private correct date/context/stories. |
 | Guess or choice | Author, target submission, value, server-recorded ordering. |
 | Judging vote | Explanation being judged, voter, yes/no, result. |
@@ -125,16 +130,18 @@ reveal path with true/false story choices and 2-per-fooled / 1-per-correct scori
 ### D. Share context judging
 
 Voice Detective adds recording playback. Chat Archaeology adds the identity-hidden
-screenshot. Both reuse explanation collection and majority judging, with the uploader
-and explanation author excluded, tied judging votes rejecting that explanation,
-and one point for each accepted explanation.
+screenshot. Both reuse explanation collection and majority judging, with the
+explanation author excluded and one point for each accepted explanation. Voice also
+excludes the uploader; Chat allows the uploader to judge. Tied votes reject.
 
 ### E. Add private-role play
 
 Memory Impostor needs a real blurred derivative, private role delivery, clear-photo
-views for others, discussion, the host's skip-to-vote control, suspect voting, and a
-chosen scoring/outcome rule. Do not count the mode as complete until that rule is
-implemented and the mandatory final ranking follows it.
+views for others, separate 20-second speaking turns, the host’s skip-to-vote control,
+and suspect voting. A shuffled role cycle prevents uploaders from being impostor on
+their own photo while giving each participant one impostor assignment. Voting moves
+directly to the next photo; player payloads omit live scores and round results. Only
+final rankings are shown after the last photo.
 
 ### F. Integrate and rehearse
 
@@ -155,7 +162,8 @@ before spending the remaining time on optional library or decorative features.
   recording is additional scope beyond uploading a prepared recording.
 - Remove chat identities from the shared pixels themselves if masking is implemented;
   do not merely hide them with a reversible screen overlay.
-- Keep the original clear photo out of the impostor's client before reveal.
+- Keep the original clear photo out of the impostor’s client. New Impostor games do
+  not reveal original photos after voting or on the final ranking screen.
 - Keep uploads after the game as agreed. Do not add an unrequested automatic deletion job.
 
 ## 6. Hosting and short-term costs discussed
@@ -199,3 +207,23 @@ the real joined-player flow, one full game of each mode, narrow layouts, and res
 Do not report the demo ready solely because the build command passes. Verify actual
 photo rendering, playable recordings, readable screenshots, the impostor's separate
 view, and every mode's transition to its own final ranking.
+
+## Reusable room implementation — 25 October 2026
+
+- One room manager resolves/caches one initialized service per room. All HTTP and
+  socket operations are room-bound; the browser identity cookie is not an active-room selector.
+- Each room uses a bounded namespace derived from the deployment namespace and code.
+  Existing Supabase tables/RPC are reused; insert-only reservation prevents code collisions.
+- Inactive services are evicted after 15 minutes without sockets or pending work.
+  Their state, room codes, and files remain stored and reload on return.
+- The old deployment namespace remains intact behind `/legacy` for existing members.
+- A single server retains the global three-upload cap. Horizontal scaling and
+  end-to-end encryption are deferred.
+
+## Rule-update compatibility — 25 October 2026
+
+Newly selected games store rules version 2 in the existing session JSON; no SQL or
+media migration is required. Saved preparation adopts the new rules when starting.
+Already-started games without this version retain their saved roles, timing,
+judging eligibility, and reveals until they finish. Rooms, player identities,
+existing file keys, retention, and the other modes’ scoring stay unchanged.

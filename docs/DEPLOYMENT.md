@@ -106,7 +106,8 @@ npm test
 npm run dev
 ```
 
-Open `http://localhost:5173`, join four independent browser profiles, upload an item,
+Open `http://localhost:5173`, create a room, join that code from at least three
+independent browser profiles, upload an item,
 and confirm a session row and storage object appear in Supabase. Development uses
 namespace `local`; Render will use `demo`, keeping their game state separate.
 
@@ -213,24 +214,51 @@ An optional dedicated domain can be purchased later, for example through
 
 - Check Supabase is active. Restore it before the presentation if its Free project
   paused after low activity: [pausing guide](https://supabase.com/docs/guides/platform/free-project-pausing).
-- Join the Render link on four separate devices/profiles and play all five modes.
+- Create a room on the Render site and join its code from at least three separate
+  devices/profiles. Play all five modes; repeat with a second room to check isolation.
 - Test actual iPhone Safari and Chrome, audio playback after a tap, a masked
   screenshot, and a blurred impostor image.
 - Refresh one device and confirm the same identity and score return.
 - Restart Render between games and verify saved state is restored.
-- Keep the host's original browser profile/cookies; deleting them loses its identity.
+- Keep browser cookies to retain player identity. The host can transfer control in
+  **View players**; active players can select a replacement when the host goes offline.
 - Disable automatic deploys during the presentation; deploy updates between games.
 
 There is no built-in live call. Remote players can use their existing group call
 and/or the text explanations and clues.
 
-### Reset a lost-host session without deleting files
+### Rooms and existing players
+
+No additional server, storage bucket, or SQL migration is needed for rooms. Keep
+`SESSION_NAMESPACE`, `SESSION_SECRET`, and Supabase settings stable. Room codes and
+state persist across deployments. They do not expire or get reassigned; files are
+retained. The 15-minute idle cache timeout only releases server memory.
+
+The homepage offers Create/Join; each room has an invite link, code, and Leave room.
+Leave disconnects only that tab. Existing cookies restore that browser's player on
+return; a new device has no account-based identity recovery and needs a new nickname.
+The old shared session and original media keys remain in the original namespace;
+existing members use **Resume previous game** (`/legacy`). It accepts no new members.
+
+Use one Render instance: online presence and service queues are process-local.
+Room creation allows 10 requests/IP/15 minutes; joining allows 100/IP/15 minutes.
+All rooms share the three-upload processing limit on the small server.
+
+### Reset a room without deleting files
+
+For an offline host, first use the in-game host selector to assign a connected
+participant. An operator reset is only needed when the whole session must be cleared.
 
 Stop/suspend the server first. In a terminal configured with the same Supabase project
-and `SESSION_NAMESPACE=demo`, run:
+and `SESSION_NAMESPACE=demo`, run the legacy reset below. For a coded room, add
+`--room 123456` to target only that room (replace the example code). Never reset a
+room while its participants are playing:
 
 ```bash
+# Original shared game only:
 npm run session:reset -- --confirm
+# One coded room only:
+npm run session:reset -- --room 123456 --confirm
 ```
 
 Resume/restart Render. Players refresh and join again; the next group chooses a fresh
@@ -281,3 +309,19 @@ files, and configuration: [deletion guide](https://supabase.com/docs/guides/plat
 | Players share one identity | Browser tabs share a cookie. Use different profiles, isolated contexts, or devices. |
 | Host lost | Original browser/cookies, or stopped-server reset procedure above. |
 | Newcomer waiting | Current game must finish; connected newcomers enter the next roster. |
+
+## Opt-in hosted room walkthrough
+
+The ordinary `test:online` command remains read-only. To deliberately test hosted
+room gameplay, the following creates five new retained test rooms and uploads
+only the repository's synthetic/sample media. It never enters `/legacy` or any
+existing room. Do not run it against someone else's deployment.
+
+```bash
+ONLINE_ROOM_TESTS=1 ONLINE_ROOM_TEST_URL=https://photo-fumble.onrender.com npm run test:e2e:online
+```
+
+It runs the three-player all-five-mode walkthrough alongside another independent
+room, then the room/tab/mobile controls test. Uploaded test media and room codes
+remain stored, following the ordinary retention policy. Physical Safari/audio
+rehearsal is still required separately.

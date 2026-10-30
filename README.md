@@ -1,8 +1,20 @@
 # Photo Fumble
 
 A five-mode browser party game built around friends' photos, recordings, and chat
-memories. All five modes are implemented with a shared lobby, a random fixed host,
-private uploads, per-game scoring, and automatic final rankings.
+memories. All five modes are implemented with reusable room codes, selectable hosts,
+private uploads, round countdowns, per-game scoring, and automatic final rankings.
+
+Choose a host directly or pick one at random. The host can pass control from
+**View players**; if they disconnect, an active player can choose a replacement.
+Guessing lasts 60 seconds (90 for Voice Detective). In Memory Impostor, every player
+gets a separate 20-second speaking turn; each ballot lasts 30 seconds. Expired stages advance automatically; refreshes
+keep the same deadline. After the final ranking, the host can use **Back to lobby**
+to return everyone to mode selection.
+
+In new Memory Impostor games, uploaders always see their clear photo and cannot be
+the impostor on it. Voting advances straight to the next photo, with scores and
+round outcomes hidden until the final ranking. Chat Archaeology uploaders can
+judge other players’ explanations; Voice Detective uploaders still sit out.
 
 ## Run locally
 
@@ -13,8 +25,13 @@ npm ci
 npm run dev
 ```
 
-Open **http://localhost:5173**. Use four separate browser profiles/private contexts
-to test multiplayer on one computer. Tabs in one profile share a player identity.
+Open **http://localhost:5173**, choose **Create a room**, and share the six-digit code
+or invite link. Friends choose **Join a room** and enter that code and a nickname.
+Each room needs at least three connected players to start a game. Use separate
+browser profiles/private contexts to test distinct players on one computer. Tabs
+in one profile share an identity, but can play in different rooms independently.
+Rooms are reusable; leaving or refreshing does not reset a game. Existing members
+of the old shared game can use **Resume previous game** to open `/legacy`.
 Local game state and files persist in the ignored `.data/` directory.
 
 ## Verify
@@ -29,7 +46,22 @@ npm run build
 
 For a built local server, set `APP_ORIGIN=http://localhost:3001` and run `npm start`.
 The development origin defaults to port 5173. Browser tests use isolated temporary
-data and four independent browser contexts, including a phone viewport.
+data and independent browser contexts for both three- and four-player games,
+including a phone viewport and two simultaneous isolated rooms.
+
+Check the public deployment with anonymous, read-only requests:
+
+```bash
+npm run test:online
+# Or check another deployment:
+npm run test:online -- https://your-service.onrender.com
+```
+
+This checks the homepage, deployed JavaScript/CSS, health API, and anonymous session
+response. It writes `output/online-checks.json`. It does not join players, upload
+files, or reset the live game. The full multiplayer walkthrough remains a local
+test; use a separate hosted test instance for cloud automation and rehearse on real
+devices before presenting.
 
 ## Hosting
 

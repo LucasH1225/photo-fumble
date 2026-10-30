@@ -1,5 +1,6 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import {
+  MIN_PLAYERS,
   MODES,
   type Asset,
   type Command,
@@ -30,11 +31,16 @@ const shuffle = <T>(items: T[]): T[] => {
   }
   return a;
 };
-export const phaseKey = (g: Game) => `${g.id}:${g.index}:${g.phase}:${g.judgeIndex}`;
+const turnBasedImpostor = (g: Game) => g.mode === 'impostor' && g.rulesVersion === 2;
+export const phaseKey = (g: Game) =>
+  `${g.id}:${g.index}:${g.phase}:${g.judgeIndex}${turnBasedImpostor(g) ? `:${g.speakerIndex ?? 0}` : ''}`;
 export const currentOwner = (g: Game) => g.order[g.index];
 export const currentSubmission = (g: Game) => g.submissions[currentOwner(g)];
 const guessers = (g: Game) => g.roster.filter((id) => id !== currentOwner(g));
-const judges = (g: Game) => guessers(g).filter((id) => id !== g.judgeAuthors[g.judgeIndex]);
+const judges = (g: Game) =>
+  (g.mode === 'chat' && g.rulesVersion === 2 ? g.roster : guessers(g)).filter(
+    (id) => id !== g.judgeAuthors[g.judgeIndex],
+  );
 const has = (object: object, key: string) => Object.hasOwn(object, key);
 export function dateDay(value: string): number {
   requireRule(/^\d{4}-\d{2}-\d{2}$/.test(value), 'Enter a complete date.');
@@ -102,7 +108,16 @@ function beginItem(g: Game): void {
   g.judgeIndex = 0;
   g.judgements = [];
   g.loaded = [];
+  if (turnBasedImpostor(g)) {
+    g.speakerOrder = shuffle(g.roster);
+    g.speakerIndex = 0;
+  }
   g.phase = g.mode === 'impostor' ? 'discuss' : g.mode === 'quiz' ? 'preview' : 'guess';
+}
+function advanceSpeaker(g: Game): void {
+  if (turnBasedImpostor(g) && (g.speakerIndex ?? 0) + 1 < g.speakerOrder!.length)
+    g.speakerIndex = (g.speakerIndex ?? 0) + 1;
+  else g.phase = 'vote';
 }
 function finish(g: Game, extra: Partial<ItemResult> = {}): void {
   const s = currentSubmission(g);
@@ -147,7 +162,10 @@ function finish(g: Game, extra: Partial<ItemResult> = {}): void {
   }
   for (const [id, points] of Object.entries(result.awards)) g.scores[id] += points;
   g.results.push(result);
-  g.phase = g.index === g.order.length - 1 ? 'results' : 'reveal';
+  if (turnBasedImpostor(g) && g.index < g.order.length - 1) {
+    g.index++;
+    beginItem(g);
+  } else g.phase = g.index === g.order.length - 1 ? 'results' : 'reveal';
 }
 function judgeNext(g: Game): void {
   const votes = Object.values(g.votes);
@@ -169,30 +187,84 @@ function closeGuesses(g: Game): void {
     }
   } else finish(g);
 }
+function stageDuration(g: Game): number | undefined {
+  if (g.phase === 'guess') return g.mode === 'voice' ? 90_000 : 60_000;
+  if (g.phase === 'discuss') return turnBasedImpostor(g) ? 20_000 : 60_000;
+  if (g.phase === 'judge' || g.phase === 'vote') return 30_000;
+}
+function updateDeadline(g: Game, previousKey: string, now: number): void {
+  const duration = stageDuration(g);
+  if (duration === undefined) delete g.deadlineAt;
+  else if (phaseKey(g) !== previousKey || g.deadlineAt === undefined) g.deadlineAt = now + duration;
+}
+// Called by the server clock, including after recovery. Only one stage advances
+// per tick, so a newly opened ballot always receives its full time allowance.
+export function expireRound(state: Session, now = Date.now()): boolean {
+  const g = state.game;
+  if (!g || stageDuration(g) === undefined) return false;
+  const previousKey = phaseKey(g);
+  if (g.deadlineAt === undefined) {
+    updateDeadline(g, previousKey, now);
+    return true;
+  }
+  if (now < g.deadlineAt) return false;
+  if (g.phase === 'guess') closeGuesses(g);
+  else if (g.phase === 'judge') judgeNext(g);
+  else if (g.phase === 'discuss') advanceSpeaker(g);
+  else if (g.phase === 'vote') finish(g);
+  updateDeadline(g, previousKey, now);
+  return true;
+}
+function requireHostChange(state: Session, playerId: string, online: Set<string>): string[] {
+  requireRule(
+    !state.hostId || playerId === state.hostId || !online.has(state.hostId),
+    'Only the current host can change the host while they are connected.',
+  );
+  const active = state.game && state.game.phase !== 'results' ? state.game : undefined;
+  requireRule(!active || active.roster.includes(playerId), 'You are in for the next game.');
+  return Object.keys(state.players).filter(
+    (id) => online.has(id) && (!active || active.roster.includes(id)),
+  );
+}
 export function applyCommand(
   state: Session,
   playerId: string,
   command: Command,
   online: Set<string>,
+  now = Date.now(),
 ): void {
   requireRule(state.players[playerId], 'Join the game first.');
   if (command.type === 'elect') {
+    const candidates = requireHostChange(state, playerId, online);
     requireRule(
-      !state.hostId && online.size >= 4,
-      'Gather at least four friends before choosing a host.',
+      candidates.length >= (state.hostId ? 1 : MIN_PLAYERS),
+      `Gather at least ${MIN_PLAYERS} friends before choosing a host.`,
     );
-    state.hostId = shuffle([...online])[0];
+    state.hostId = shuffle(candidates)[0];
+    return;
+  }
+  if (command.type === 'setHost') {
+    const candidates = requireHostChange(state, playerId, online);
+    requireRule(candidates.includes(command.targetId), 'Choose a connected player in this game.');
+    state.hostId = command.targetId;
+    return;
+  }
+  if (command.type === 'lobby') {
+    requireRule(playerId === state.hostId, 'Only the host can return everyone to the lobby.');
+    requireRule(state.game?.phase === 'results', 'Finish the current game first.');
+    delete state.game;
     return;
   }
   if (command.type === 'choose') {
     requireRule(playerId === state.hostId, 'Only the host can choose a mode.');
     requireRule(!state.game || state.game.phase === 'results', 'Finish the current game first.');
     requireRule(
-      MODES.includes(command.mode) && online.size >= 4,
-      'At least four connected players are needed.',
+      MODES.includes(command.mode) && online.size >= MIN_PLAYERS,
+      `At least ${MIN_PLAYERS} connected players are needed.`,
     );
     const roster = Object.keys(state.players).filter((id) => online.has(id));
     state.game = {
+      rulesVersion: 2,
       id: randomUUID(),
       mode: command.mode,
       phase: 'prepare',
@@ -216,6 +288,9 @@ export function applyCommand(
   }
   const g = state.game;
   requireRule(g && g.roster.includes(playerId), 'You are in for the next game.');
+  const previousKey = phaseKey(g);
+  if (['guess', 'judge', 'clue', 'vote'].includes(command.type))
+    requireRule(g.deadlineAt === undefined || now < g.deadlineAt, 'Time is up for this stage.');
   if (['start', 'cancel', 'open', 'close', 'next', 'skip', 'skipItem'].includes(command.type))
     requireRule(playerId === state.hostId, 'Only the host can do that.');
   switch (command.type) {
@@ -225,10 +300,18 @@ export function applyCommand(
         'Everyone needs to prepare one item.',
       );
       g.order = shuffle(g.roster);
+      // Preparation has not exposed roles, so older saved preparation can adopt current rules.
+      g.rulesVersion ??= 2;
       const roles = shuffle(g.roster);
-      g.order.forEach((owner, i) => {
-        g.impostors[owner] = roles[i];
-      });
+      if (turnBasedImpostor(g)) {
+        // A shuffled cycle is a balanced assignment with no uploader assigned their own photo.
+        roles.forEach((owner, i) => {
+          g.impostors[owner] = roles[(i + 1) % roles.length];
+        });
+      } else
+        g.order.forEach((owner, i) => {
+          g.impostors[owner] = roles[i];
+        });
       beginItem(g);
       break;
     }
@@ -275,6 +358,10 @@ export function applyCommand(
         'Your clue is already locked or discussion has ended.',
       );
       requireRule(
+        !turnBasedImpostor(g) || g.speakerOrder?.[g.speakerIndex ?? 0] === playerId,
+        'Wait for your speaking turn.',
+      );
+      requireRule(
         command.value.trim().length > 0 && command.value.length <= 300,
         'Keep your clue between 1 and 300 characters.',
       );
@@ -314,6 +401,7 @@ export function applyCommand(
     default:
       throw new GameError('Unknown action.');
   }
+  updateDeadline(g, previousKey, now);
 }
 export function viewFor(state: Session, id: string, online: Set<string>): PlayerView {
   const me = state.players[id];
@@ -321,6 +409,7 @@ export function viewFor(state: Session, id: string, online: Set<string>): Player
   const g = state.game;
   const view: PlayerView = {
     version: state.version,
+    serverTime: Date.now(),
     me,
     hostId: state.hostId,
     players: Object.values(state.players).map((p) => ({ ...p, online: online.has(p.id) })),
@@ -332,8 +421,12 @@ export function viewFor(state: Session, id: string, online: Set<string>): Player
     mode: g.mode,
     phase: g.phase,
     phaseKey: phaseKey(g),
+    deadlineAt: g.deadlineAt,
     roster: g.roster,
-    scores: g.scores,
+    scores: turnBasedImpostor(g) && g.phase !== 'results' ? {} : g.scores,
+    ...(turnBasedImpostor(g)
+      ? { hideRoundResults: true, scoresHidden: g.phase !== 'results' }
+      : {}),
     loaded: g.loaded,
     ready: Object.keys(g.submissions),
     item: g.index + 1,
@@ -354,8 +447,10 @@ export function viewFor(state: Session, id: string, online: Set<string>): Player
     return view;
   }
   const s = currentSubmission(g);
-  v.ownerId = s.ownerId;
-  v.assetId = s.assetId;
+  if (!(turnBasedImpostor(g) && g.phase === 'results')) {
+    v.ownerId = s.ownerId;
+    v.assetId = s.assetId;
+  }
   const revealed = g.phase === 'reveal' || g.phase === 'results';
   if (g.mode === 'impostor' && !revealed) {
     v.isImpostor = g.impostors[s.ownerId] === id;
@@ -379,13 +474,19 @@ export function viewFor(state: Session, id: string, online: Set<string>): Player
   if (g.phase === 'discuss') {
     v.clue = g.clues[id];
     v.clues = g.clues;
+    if (turnBasedImpostor(g)) {
+      v.speakerOrder = g.speakerOrder;
+      v.speakerTurn = (g.speakerIndex ?? 0) + 1;
+      v.speakerId = g.speakerOrder![g.speakerIndex ?? 0];
+      v.canClue = v.speakerId === id && !has(g.clues, id);
+    }
   }
   if (g.phase === 'vote') {
     v.ownVote = g.votes[id];
     v.submitted = Object.keys(g.votes).length;
     v.eligible = g.roster.length;
   }
-  if (revealed) {
+  if (revealed && !turnBasedImpostor(g)) {
     v.result = g.results.at(-1);
     v.answer = s.answer;
   }
@@ -410,6 +511,7 @@ export function mediaKeyFor(
     g && asset && asset.gameId === g.id && g.roster.includes(playerId),
     'This media is unavailable to you.',
   );
+  requireRule(!(turnBasedImpostor(g) && g.phase === 'results'), 'This game has ended.');
   if (g.phase === 'prepare') {
     requireRule(
       asset.ownerId === playerId && g.submissions[playerId]?.assetId === assetId,

@@ -1,0 +1,69 @@
+{
+  "purpose": "Curated demonstration photographs for the isolated Photo Fumble memory-river join-page concept. These are public stock photographs, not player uploads, game clues, or a chronological archive.",
+  "verifiedOn": "2026-10-25",
+  "photos": [
+    {
+      "file": "assets/picnic.jpg",
+      "description": "Friends enjoying a sunset picnic by the sea",
+      "photographer": "Kelvin Zyteng",
+      "source": "https://unsplash.com/photos/friends-enjoy-a-sunset-picnic-by-the-sea-b6QEE_6ykp0",
+      "license": "Unsplash License",
+      "licenseUrl": "https://unsplash.com/license",
+      "derivation": "Resized copy of the existing ui-concepts/assets/sample-memory.jpg review asset; 640 pixels wide."
+    },
+    {
+      "file": "assets/birthday.jpg",
+      "description": "Two friends sharing a birthday moment with cake and candles indoors",
+      "photographer": "cottonbro studio",
+      "source": "https://www.pexels.com/photo/a-man-surprising-a-person-with-a-birthday-cake-7254227/",
+      "downloadUrl": "https://images.pexels.com/photos/7254227/pexels-photo-7254227.jpeg?auto=compress&cs=tinysrgb&w=640&q=75",
+      "license": "Pexels License",
+      "licenseUrl": "https://www.pexels.com/license/"
+    },
+    {
+      "file": "assets/beach-sunset.jpg",
+      "description": "Two people sitting together by the sea at sunset in Kupang, Indonesia",
+      "photographer": "el jusuf",
+      "source": "https://www.pexels.com/photo/friends-sitting-on-a-beach-during-sunset-17499779/",
+      "downloadUrl": "https://images.pexels.com/photos/17499779/pexels-photo-17499779.jpeg?auto=compress&cs=tinysrgb&w=640&q=75",
+      "license": "Pexels License",
+      "licenseUrl": "https://www.pexels.com/license/"
+    },
+    {
+      "file": "assets/city-walk.jpg",
+      "description": "Three friends walking and talking together in the city",
+      "photographer": "George Pak",
+      "source": "https://www.pexels.com/photo/photo-of-a-group-of-friends-talking-while-walking-7972658/",
+      "downloadUrl": "https://images.pexels.com/photos/7972658/pexels-photo-7972658.jpeg?auto=compress&cs=tinysrgb&w=640&q=75",
+      "license": "Pexels License",
+      "licenseUrl": "https://www.pexels.com/license/"
+    },
+    {
+      "file": "assets/concert.jpg",
+      "description": "Friends at a nighttime outdoor concert in Medellin, Colombia",
+      "photographer": "Adrian Camilo",
+      "source": "https://www.pexels.com/photo/friends-during-concert-15130393/",
+      "downloadUrl": "https://images.pexels.com/photos/15130393/pexels-photo-15130393.jpeg?auto=compress&cs=tinysrgb&w=640&q=75",
+      "license": "Pexels License",
+      "licenseUrl": "https://www.pexels.com/license/"
+    },
+    {
+      "file": "assets/train-journey.jpg",
+      "description": "A blue train traveling through green countryside, seen from its window",
+      "photographer": "龔 月強",
+      "source": "https://www.pexels.com/photo/view-of-train-from-window-3233935/",
+      "downloadUrl": "https://images.pexels.com/photos/3233935/pexels-photo-3233935.jpeg?auto=compress&cs=tinysrgb&w=640&q=75",
+      "license": "Pexels License",
+      "licenseUrl": "https://www.pexels.com/license/"
+    },
+    {
+      "file": "assets/pizza-night.jpg",
+      "description": "Friends reaching for slices of pizza together",
+      "photographer": "cottonbro studio",
+      "source": "https://www.pexels.com/photo/photo-of-people-holding-pizza-3944307/",
+      "downloadUrl": "https://images.pexels.com/photos/3944307/pexels-photo-3944307.jpeg?auto=compress&cs=tinysrgb&w=640&q=75",
+      "license": "Pexels License",
+      "licenseUrl": "https://www.pexels.com/license/"
+    }
+  ]
+}

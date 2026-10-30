@@ -1,4 +1,5 @@
 export const MODES = ['quiz', 'voice', 'chat', 'bluff', 'impostor'] as const;
+export const MIN_PLAYERS = 3;
 export type Mode = (typeof MODES)[number];
 export type Phase =
   'prepare' | 'preview' | 'guess' | 'judge' | 'discuss' | 'vote' | 'reveal' | 'results';
@@ -86,6 +87,7 @@ export interface ItemResult {
   trueIndex?: number;
 }
 export interface Game {
+  rulesVersion?: 2;
   id: string;
   mode: Mode;
   phase: Phase;
@@ -104,6 +106,9 @@ export interface Game {
   results: ItemResult[];
   sequence: number;
   loaded: string[];
+  deadlineAt?: number;
+  speakerOrder?: string[];
+  speakerIndex?: number;
 }
 export interface Session {
   version: number;
@@ -114,8 +119,12 @@ export interface Session {
 }
 export type Command =
   | { type: 'elect' }
+  | { type: 'setHost'; targetId: string }
   | { type: 'choose'; mode: Mode }
-  | { type: 'start' | 'cancel' | 'open' | 'close' | 'next' | 'skip' | 'skipItem' | 'loaded' }
+  | {
+      type:
+        'start' | 'cancel' | 'lobby' | 'open' | 'close' | 'next' | 'skip' | 'skipItem' | 'loaded';
+    }
   | { type: 'guess'; value: string }
   | { type: 'judge'; yes: boolean }
   | { type: 'clue'; value: string }
@@ -134,7 +143,9 @@ export interface Receipt {
   code?: string;
 }
 export interface PlayerView {
+  room?: { code: string };
   version: number;
+  serverTime: number;
   me: Player;
   hostId?: string;
   players: (Player & { online: boolean })[];
@@ -144,8 +155,15 @@ export interface PlayerView {
     mode: Mode;
     phase: Phase;
     phaseKey: string;
+    deadlineAt?: number;
     roster: string[];
     scores: Record<string, number>;
+    scoresHidden?: boolean;
+    hideRoundResults?: boolean;
+    speakerId?: string;
+    speakerOrder?: string[];
+    speakerTurn?: number;
+    canClue?: boolean;
     loaded: string[];
     ready: string[];
     ownSubmission?: { assetId: string; answer: string; falseStory?: string };
