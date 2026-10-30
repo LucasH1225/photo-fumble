@@ -36,7 +36,8 @@ looks like the back of a print or a blur; reveals are a flip, a focus pull or a 
 - Type: Archivo (UI), Caveat (anything a player "wrote"), Space Mono (dates, timers).
   Loaded from Google Fonts in `index.html`.
 - Motion keyframes are prefixed `pf*` (deal, flip, stamp, rise, pulse). Everything is
-  disabled under `prefers-reduced-motion`. Keep animations short (under ~800 ms).
+  disabled under `prefers-reduced-motion`. Keep animations short (under ~800 ms); the
+  one exception is the homepage prints' slow ambient sway (`pfSway`, 7–9 s loops).
 - Design doc: https://claude.ai/artifact/8KvCaBazcc4GeTRgJo8f5J
 - Interactive prototype: https://claude.ai/artifact/U4bRBXX1pUPoKGDvfgtfCK
 - Pre-redesign originals are in `_ui-backup-2026-10-29/`.

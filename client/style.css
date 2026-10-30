@@ -1853,6 +1853,16 @@ progress::-moz-progress-bar {
     opacity: 1;
   }
 }
+@keyframes pfSway {
+  from {
+    translate: -1.5px 1px;
+    rotate: -0.8deg;
+  }
+  to {
+    translate: 1.5px -2px;
+    rotate: 0.8deg;
+  }
+}
 @keyframes pfUp {
   from {
     transform: translateY(18px);
