@@ -1,7 +1,8 @@
 # After Hours UI implementation
 
-Implemented and verified locally on 25 October 2026. These UI changes have not
-been deployed.
+Implemented and verified locally on 25 October 2026. The checks below describe
+local validation of the publication candidate. Hosted visual verification and
+hosted multiplayer gameplay require separate checks after deployment.
 
 ## What changed
 
@@ -30,10 +31,9 @@ The UI uses the existing personalized `PlayerView`, command envelopes, media
 authorization, upload endpoint, session identity, scoring, and host controls.
 No new game API or server rule was introduced by the visual redesign.
 
-A concurrent workspace change lowered the minimum to three players. The UI now
-uses the shared `MIN_PLAYERS` constant for both availability and copy, matching
-the current backend. The separate backend/rule changes and other pre-existing
-workspace work are preserved.
+The UI uses the published shared `MIN_PLAYERS = 3` constant for both availability
+and copy, matching the backend. This UI update leaves the existing engine, scoring,
+three-player coverage, deployment checks, and dependency lockfile unchanged.
 
 The server continues to flatten Chat masks and encode Impostor blur. The mask
 editor uses the server's mask color; the UI never creates a substitute CSS blur
@@ -53,9 +53,10 @@ or requests a hidden clear image.
 - Production builds passed as part of the browser runs. No browser page errors
   were recorded in the successful walkthroughs.
 
-One combined rerun encountered disappearing files in the shared Playwright trace
-directory. Clean final walkthroughs passed using an isolated port and output
-directories; their configuration is in the ignored `output/playwright/` folder.
+Publication verification runs against an identical source snapshot in a separate
+temporary directory, using `E2E_PORT` for an independent local server. All source
+files are checked against the publication tree; screenshots and traces remain
+ignored generated outputs.
 
 Visual review covered mode selection, preparation, all five play views, reveals,
 and phone/results layouts. Generated captures are available at
@@ -65,12 +66,10 @@ media in these captures are test uploads, not content embedded in the game.
 
 ## Local review
 
-- Game: <http://localhost:5175>
-- Screenshot gallery: <http://127.0.0.1:8765/output/playwright/after-hours/index.html>
-
-The game preview uses separate temporary local storage and disables cloud
-persistence. It leaves the existing development server and `.env` unchanged.
-The gallery uses the existing local review server.
+Run `npm run dev` for a local preview. Run `npm run test:e2e` to regenerate the
+three- and four-player review captures listed above. Set `E2E_PORT` if the default
+4173 is occupied. Browser tests use separate temporary local storage and disable
+cloud persistence; they do not join or modify the shared hosted game.
 
 Phone verification uses Chromium at a phone viewport. Physical iPhone/Safari,
 cross-network play, and hosted Supabase gameplay were not exercised by this UI

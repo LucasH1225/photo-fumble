@@ -302,7 +302,7 @@ files, and configuration: [deletion guide](https://supabase.com/docs/guides/plat
 | --- | --- |
 | Build fails / package file missing | Repository root, committed lockfile, Node 24, exact build command. |
 | Service unhealthy | Runtime logs, required environment variables, SQL migration, `PORT`. |
-| Website opens but actions fail | Correct `APP_ORIGIN`; remove localhost override on Render. Four connected players; host identity. |
+| Website opens but actions fail | Correct `APP_ORIGIN`; remove localhost override on Render. At least three connected players; host identity. |
 | Upload fails | Bucket name, stored MIME allowlist, size/duration, backend secret, project active. Retry after processing finishes. |
 | Table/RPC access error | Entire migration run; backend secret used. Do not make tables public. |
 | Audio fails | MP3/M4A/WAV, user-tapped playback, retry control for expired links. |
